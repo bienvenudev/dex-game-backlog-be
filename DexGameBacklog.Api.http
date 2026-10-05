@@ -1,0 +1,2 @@
+GET {{DexGameBacklog.Api_HostAddress}}/weatherforecast/
+Accept: application/json
