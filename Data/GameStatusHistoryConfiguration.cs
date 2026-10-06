@@ -27,5 +27,10 @@ public class GameStatusHistoryConfiguration : IEntityTypeConfiguration<GameStatu
 
         builder.Property(history => history.ChangedAt)
             .IsRequired();
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(history => history.ChangedBy)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
