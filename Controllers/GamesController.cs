@@ -42,12 +42,6 @@ public class GamesController(
         var response = games
             .Select(item =>
             {
-                var percentage = item.Total == 0
-                    ? null
-                    : (int?)Math.Round(
-                        (double)item.Completed / item.Total * 100,
-                        MidpointRounding.AwayFromZero);
-
                 return new GameSummaryResponse(
                     item.Game.Id,
                     item.Game.Title,
@@ -61,7 +55,7 @@ public class GamesController(
                     item.Game.FinishedAt,
                     item.Game.CreatedAt,
                     item.Game.UpdatedAt,
-                    new ProgressResponse(item.Completed, item.Total, percentage));
+                    ProgressCalculator.Calculate(item.Completed, item.Total));
             })
             .ToList();
 
@@ -158,5 +152,60 @@ public class GamesController(
         );
 
         return StatusCode(StatusCodes.Status201Created, response);
+    }
+
+    [HttpGet("{gameId:guid}")]
+    public async Task<ActionResult<GameDetailResponse>> GetById(
+        Guid gameId,
+        CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+
+        var game = await dbContext.Games
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == gameId &&
+                             candidate.UserId == userId,
+                cancellationToken);
+
+        if (game is null)
+        {
+            return NotFound(new { message = "Game not found." });
+        }
+
+        var objectives = await dbContext.Objectives
+            .AsNoTracking()
+            .Where(objective => objective.GameId == game.Id)
+            .OrderBy(objective => objective.Position)
+            .ToListAsync(cancellationToken);
+
+        var completed = objectives.Count(objective => objective.Completed);
+        var total = objectives.Count;
+
+        var response = new GameDetailResponse(
+            game.Id,
+            game.Title,
+            (ContractPlatform)game.Platform,
+            (ContractGameStatus)game.Status,
+            game.Rating,
+            game.Notes,
+            game.CoverUrl,
+            game.BackgroundUrl,
+            game.StartedAt,
+            game.FinishedAt,
+            game.CreatedAt,
+            game.UpdatedAt,
+            objectives.Select(objective => new ObjectiveResponse(
+                objective.Id,
+                objective.GameId,
+                objective.Label,
+                objective.Completed,
+                objective.Position,
+                objective.CompletedAt,
+                objective.CreatedAt,
+                objective.UpdatedAt)).ToList(),
+            ProgressCalculator.Calculate(completed, total));
+
+        return Ok(response);
     }
 }
