@@ -99,13 +99,7 @@ public class ObjectivesController(
             return BadRequest(new { message = "Label is required." });
         }
 
-        var objective = await dbContext.Objectives
-            .SingleOrDefaultAsync(
-                candidate => candidate.Id == objectiveId &&
-                             candidate.GameId == gameId &&
-                             dbContext.Games.Any(game => game.Id == candidate.GameId &&
-                                                         game.UserId == userId),
-                cancellationToken);
+        var objective = await FindOwnedObjective(gameId, objectiveId, userId, cancellationToken);
 
         if (objective is null)
         {
@@ -152,13 +146,7 @@ public class ObjectivesController(
     {
         var userId = currentUser.UserId;
 
-        var objective = await dbContext.Objectives
-            .SingleOrDefaultAsync(
-                candidate => candidate.Id == objectiveId &&
-                             candidate.GameId == gameId &&
-                             dbContext.Games.Any(game => game.Id == candidate.GameId &&
-                                                         game.UserId == userId),
-                cancellationToken);
+        var objective = await FindOwnedObjective(gameId, objectiveId, userId, cancellationToken);
 
         if (objective is null)
         {
@@ -189,11 +177,7 @@ public class ObjectivesController(
     {
         var userId = currentUser.UserId;
 
-        var objective = await dbContext.Objectives
-            .SingleOrDefaultAsync(candidate => candidate.Id == objectiveId && candidate.GameId == gameId &&
-                                               dbContext.Games.Any(game =>
-                                                   game.Id == candidate.GameId && game.UserId == userId),
-                cancellationToken);
+        var objective = await FindOwnedObjective(gameId, objectiveId, userId, cancellationToken);
 
         if (objective is null)
         {
@@ -216,6 +200,27 @@ public class ObjectivesController(
             objective.CompletedAt,
             objective.CreatedAt,
             objective.UpdatedAt));
+    }
+
+    [HttpDelete("{objectiveId:guid}")]
+    public async Task<IActionResult> Delete(
+        Guid gameId,
+        Guid objectiveId,
+        CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+
+        var objective = await FindOwnedObjective(gameId, objectiveId, userId, cancellationToken);
+
+        if (objective is null)
+        {
+            return NotFound(new { message = "Objective not found." });
+        }
+
+        dbContext.Objectives.Remove(objective);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return NoContent();
     }
 
     [HttpPost]
@@ -291,5 +296,17 @@ public class ObjectivesController(
             objectiveEntity.UpdatedAt);
 
         return StatusCode(StatusCodes.Status201Created, response);
+    }
+
+    private Task<Objective?> FindOwnedObjective(Guid gameId, Guid objectiveId, Guid userId,
+        CancellationToken cancellationToken)
+    {
+        return dbContext.Objectives
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == objectiveId &&
+                             candidate.GameId == gameId &&
+                             dbContext.Games.Any(game => game.Id == candidate.GameId &&
+                                                         game.UserId == userId),
+                cancellationToken);
     }
 }
