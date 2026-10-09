@@ -208,4 +208,136 @@ public class GamesController(
 
         return Ok(response);
     }
+
+    [HttpPut("{gameId:guid}")]
+    public async Task<ActionResult<GameSummaryResponse>> Update(
+        Guid gameId,
+        [FromBody] GameInput input,
+        CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+        var title = input.Title?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return BadRequest(new { message = "Title is required." });
+        }
+
+        if (input.Rating is not null &&
+            (input.Rating < 1 || input.Rating > 10))
+        {
+            return BadRequest(new
+            {
+                message = "Rating must be a whole number from 1 to 10."
+            });
+        }
+
+        if (input.Status == ContractGameStatus.UNPLAYED &&
+            input.Rating is not null)
+        {
+            return BadRequest(new
+            {
+                message = "An unplayed game cannot have a rating."
+            });
+        }
+
+        var game = await dbContext.Games
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == gameId &&
+                             candidate.UserId == userId,
+                cancellationToken);
+
+        if (game is null)
+        {
+            return NotFound(new { message = "Game not found." });
+        }
+
+        if (game.Status != (DomainGameStatus)input.Status)
+        {
+            return Conflict(new
+            {
+                message = "Use the status endpoint to change a game's status."
+            });
+        }
+
+        var isDuplicate = await dbContext.Games
+            .AsNoTracking()
+            .AnyAsync(candidate => candidate.UserId == userId &&
+                                   candidate.Id != gameId &&
+                                   candidate.Title.ToLower() == title.ToLower() &&
+                                   candidate.Platform == (DomainPlatform)input.Platform,
+                cancellationToken);
+
+        if (isDuplicate)
+        {
+            return Conflict(new
+            {
+                message = $"You already have '{title}' on this platform in your backlog."
+            });
+        }
+
+        game.Title = title;
+        game.Platform = (DomainPlatform)input.Platform;
+        game.Rating = input.Status == ContractGameStatus.UNPLAYED
+            ? null
+            : input.Rating;
+        game.Notes = input.Notes;
+        game.CoverUrl = input.CoverUrl;
+        game.BackgroundUrl = input.BackgroundUrl;
+        game.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var progress = await dbContext.Objectives
+            .Where(objective => objective.GameId == game.Id)
+            .GroupBy(objective => objective.GameId)
+            .Select(group => new
+            {
+                Total = group.Count(),
+                Completed = group.Count(objective => objective.Completed)
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var total = progress?.Total ?? 0;
+        var completed = progress?.Completed ?? 0;
+
+        return Ok(new GameSummaryResponse(
+            game.Id,
+            game.Title,
+            (ContractPlatform)game.Platform,
+            (ContractGameStatus)game.Status,
+            game.Rating,
+            game.Notes,
+            game.CoverUrl,
+            game.BackgroundUrl,
+            game.StartedAt,
+            game.FinishedAt,
+            game.CreatedAt,
+            game.UpdatedAt,
+            ProgressCalculator.Calculate(completed, total)));
+    }
+
+    [HttpDelete("{gameId:guid}")]
+    public async Task<IActionResult> Delete(
+        Guid gameId,
+        CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+
+        var game = await dbContext.Games
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == gameId &&
+                             candidate.UserId == userId,
+                cancellationToken);
+
+        if (game is null)
+        {
+            return NotFound(new { message = "Game not found." });
+        }
+
+        dbContext.Games.Remove(game);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return NoContent();
+    }
 }

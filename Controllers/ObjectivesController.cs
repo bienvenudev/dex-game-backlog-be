@@ -223,6 +223,75 @@ public class ObjectivesController(
         return NoContent();
     }
 
+    [HttpPut("order")]
+    public async Task<ActionResult<IReadOnlyList<ObjectiveResponse>>> Reorder(
+        Guid gameId,
+        ObjectiveOrderInput input,
+        CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+
+        var gameExists = await dbContext.Games
+            .AsNoTracking()
+            .AnyAsync(
+                game => game.Id == gameId && game.UserId == userId,
+                cancellationToken);
+
+        if (!gameExists)
+        {
+            return NotFound(new { message = "Game not found." });
+        }
+
+        var objectives = await dbContext.Objectives
+            .Where(objective => objective.GameId == gameId)
+            .ToListAsync(cancellationToken);
+
+        var requestedIds = input.ObjectiveIds ?? [];
+        var hasDuplicateIds = requestedIds.Count != requestedIds.Distinct().Count();
+        var containsExactlyTheSameObjectives =
+            requestedIds.Count == objectives.Count &&
+            requestedIds.ToHashSet().SetEquals(objectives.Select(objective => objective.Id));
+
+        if (hasDuplicateIds || !containsExactlyTheSameObjectives)
+        {
+            return BadRequest(new
+            {
+                message = "ObjectiveIds must contain every objective for the game exactly once."
+            });
+        }
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            cancellationToken);
+
+        var now = DateTimeOffset.UtcNow;
+        var objectivesById = objectives.ToDictionary(objective => objective.Id);
+
+        for (var index = 0; index < requestedIds.Count; index++)
+        {
+            var objective = objectivesById[requestedIds[index]];
+            objective.Position = index + 1;
+            objective.UpdatedAt = now;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var response = requestedIds
+            .Select(objectiveId => objectivesById[objectiveId])
+            .Select(objective => new ObjectiveResponse(
+                objective.Id,
+                objective.GameId,
+                objective.Label,
+                objective.Completed,
+                objective.Position,
+                objective.CompletedAt,
+                objective.CreatedAt,
+                objective.UpdatedAt))
+            .ToList();
+
+        return Ok(response);
+    }
+
     [HttpPost]
     public async Task<ActionResult<ObjectiveResponse>> Create(
         Guid gameId,
