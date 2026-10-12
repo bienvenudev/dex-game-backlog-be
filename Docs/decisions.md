@@ -53,3 +53,12 @@ Development tokens currently expire after eight hours. This is a temporary
 convenience choice and should become configuration-driven before deployment.
 Production authentication will require password hashing, secret management,
 username uniqueness, and a deliberate token/refresh-token policy.
+
+## Dashboard recent-games limit
+
+The dashboard returns at most five recently updated games by applying
+`Take(5)` after ordering by `UpdatedAt` descending. The capstone requires
+dashboard summary data and a `RecentlyUpdatedGames` collection, but it does
+not prescribe a specific number of items. Five is an intentional small
+response-size choice for the dashboard, not a business rule. It can be
+changed later or made configurable if the UI needs a different limit.

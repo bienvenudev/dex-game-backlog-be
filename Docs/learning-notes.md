@@ -101,3 +101,44 @@ JOIN "Objectives" AS objective
 objectives. EF uses the configuration to create the database foreign key;
 normal queries still use LINQ, which EF translates into SQL joins or related
 queries.
+
+## How the dashboard summary is built
+
+`DashboardController` does not store a separate dashboard object in the
+database. It calculates the summary from the authenticated user's games and
+objectives:
+
+- `GroupBy` counts games by their current status.
+- `Average` calculates the average of ratings that exist.
+- grouped objective counts identify fully complete games and games with no
+  objectives.
+- the recent-games query orders by `UpdatedAt` and uses `Take(5)` to return
+  only a small dashboard list.
+
+Every query includes the current user's ID. This is both an ownership rule and
+a correctness requirement: dashboard totals must not include another user's
+games.
+
+The recent-games limit is a presentation/performance decision. It is not the
+same kind of rule as "a title is required"; changing it should not alter the
+meaning of the stored data.
+
+## IDs in status history responses
+
+`GameStatusHistory.Id` is the identifier of the history row itself. It is
+generated with `Guid.NewGuid()` when a successful status transition creates
+the row. `GameStatusHistory.GameId` identifies the related game, while
+`ChangedBy` identifies the user who made the change. Returning `entry.Id`
+therefore lets a client distinguish one history event from another; it is not
+the game's ID.
+
+## Validate before persistence
+
+Request validation belongs at the HTTP boundary as well as in the database.
+The controller can return a useful `400 Bad Request` for an invalid enum,
+blank/oversized text, or invalid rating before EF Core sends SQL. Database
+length limits and unique indexes remain important backstops, but database
+errors are less useful to an API client than a deliberate validation response.
+
+The validation helper is shared by the game and objective controllers so the
+same limits are not reimplemented differently in each endpoint.

@@ -79,6 +79,10 @@ public sealed record StatusUpdateInput(
     GameStatus Status,
     string? Comment);
 
+public sealed record StatusUpdateResponse(
+    GameSummaryResponse Game,
+    bool HasOutstandingObjectives);
+
 public sealed record ObjectiveUpdateInput(string Label);
 
 public sealed record ObjectiveOrderInput(

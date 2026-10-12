@@ -99,6 +99,11 @@ public class ObjectivesController(
             return BadRequest(new { message = "Label is required." });
         }
 
+        if (!InputValidation.IsValidText(label, 200))
+        {
+            return BadRequest(new { message = "Label cannot exceed 200 characters." });
+        }
+
         var objective = await FindOwnedObjective(gameId, objectiveId, userId, cancellationToken);
 
         if (objective is null)
@@ -316,6 +321,11 @@ public class ObjectivesController(
         if (string.IsNullOrWhiteSpace(label))
         {
             return BadRequest(new { message = "Label is required." });
+        }
+
+        if (!InputValidation.IsValidText(label, 200))
+        {
+            return BadRequest(new { message = "Label cannot exceed 200 characters." });
         }
 
         var duplicate = await dbContext.Objectives
