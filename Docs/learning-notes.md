@@ -161,6 +161,18 @@ placed directly on the properties that ASP.NET Core validates. Positional
 records are still useful for response DTOs because those responses do not need
 input validation.
 
+## Filtering and paginating list queries
+
+The game-list query applies ownership and filters before materializing results.
+It calculates objective totals in the database projection, so the API does not
+load every objective into memory just to calculate progress. `CountAsync`
+determines the total matching rows, then `Skip` and `Take` fetch only the
+requested page.
+
+The response remains an array for frontend compatibility. Pagination metadata
+is sent in headers, which lets newer clients paginate without changing the
+existing response body shape.
+
 ## Why request DTOs use `init`
 
 Request DTO properties use `get; init;` instead of `get; set;`. ASP.NET Core

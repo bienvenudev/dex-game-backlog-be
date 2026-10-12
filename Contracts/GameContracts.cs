@@ -50,6 +50,21 @@ public sealed record GameSummaryResponse(
     DateTimeOffset UpdatedAt,
     ProgressResponse Progress);
 
+public sealed record GameQueryParameters
+{
+    public string? Search { get; init; }
+    public Platform? Platform { get; init; }
+    public GameStatus? Status { get; init; }
+    public int? MinRating { get; init; }
+    public int? MaxRating { get; init; }
+    public bool? HasObjectives { get; init; }
+    public bool? FullyComplete { get; init; }
+    public string SortBy { get; init; } = "updatedAt";
+    public string SortDirection { get; init; } = "desc";
+    public int Page { get; init; } = 1;
+    public int PageSize { get; init; } = 20;
+}
+
 public sealed record GameDetailResponse(
     Guid Id,
     string Title,

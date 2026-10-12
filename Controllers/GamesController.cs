@@ -21,20 +21,94 @@ public class GamesController(
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<GameSummaryResponse>>> Get(
+        [FromQuery] GameQueryParameters query,
         CancellationToken cancellationToken)
     {
+        if (query.Page < 1 ||
+            query.PageSize is < 1 or > 100 ||
+            query.MinRating is < 1 or > 10 ||
+            query.MaxRating is < 1 or > 10 ||
+            (query.MinRating is not null &&
+             query.MaxRating is not null &&
+             query.MinRating > query.MaxRating) ||
+            !IsSupportedSort(query.SortBy) ||
+            !IsSupportedSortDirection(query.SortDirection))
+        {
+            return BadRequest(new
+            {
+                message = "One or more game list query parameters are invalid."
+            });
+        }
+
         var userId = currentUser.UserId;
 
-        var games = await dbContext.Games
+        var gamesQuery = dbContext.Games
             .AsNoTracking()
-            .Where(game => game.UserId == userId)
-            .Select(game => new
+            .Where(game => game.UserId == userId);
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim();
+            gamesQuery = gamesQuery.Where(game =>
+                EF.Functions.ILike(game.Title, $"%{search}%"));
+        }
+
+        if (query.Platform is not null)
+        {
+            gamesQuery = gamesQuery.Where(game =>
+                game.Platform == (DomainPlatform)query.Platform.Value);
+        }
+
+        if (query.Status is not null)
+        {
+            gamesQuery = gamesQuery.Where(game =>
+                game.Status == (DomainGameStatus)query.Status.Value);
+        }
+
+        if (query.MinRating is not null)
+        {
+            gamesQuery = gamesQuery.Where(game => game.Rating >= query.MinRating);
+        }
+
+        if (query.MaxRating is not null)
+        {
+            gamesQuery = gamesQuery.Where(game => game.Rating <= query.MaxRating);
+        }
+
+        var projectedGames = gamesQuery
+            .Select(game => new GameListItem
             {
                 Game = game,
                 Total = dbContext.Objectives.Count(objective => objective.GameId == game.Id),
                 Completed = dbContext.Objectives.Count(objective => objective.GameId == game.Id &&
                                                                     objective.Completed)
-            })
+            });
+
+        if (query.HasObjectives is not null)
+        {
+            projectedGames = query.HasObjectives.Value
+                ? projectedGames.Where(item => item.Total > 0)
+                : projectedGames.Where(item => item.Total == 0);
+        }
+
+        if (query.FullyComplete is not null)
+        {
+            projectedGames = query.FullyComplete.Value
+                ? projectedGames.Where(item => item.Total > 0 &&
+                                               item.Completed == item.Total)
+                : projectedGames.Where(item => item.Total == 0 ||
+                                               item.Completed < item.Total);
+        }
+
+        projectedGames = ApplyGameOrdering(
+            projectedGames,
+            query.SortBy,
+            query.SortDirection);
+
+        var totalCount = await projectedGames.CountAsync(cancellationToken);
+        var games = await projectedGames
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
             .ToListAsync(cancellationToken);
 
         var response = games
@@ -57,7 +131,52 @@ public class GamesController(
             })
             .ToList();
 
+        Response.Headers.Append("X-Total-Count", totalCount.ToString());
+        Response.Headers.Append("X-Page", query.Page.ToString());
+        Response.Headers.Append("X-Page-Size", query.PageSize.ToString());
+
         return Ok(response);
+    }
+
+    private static IQueryable<GameListItem> ApplyGameOrdering(
+        IQueryable<GameListItem> games,
+        string sortBy,
+        string sortDirection)
+    {
+        var descending = sortDirection.Equals("desc", StringComparison.OrdinalIgnoreCase);
+
+        return sortBy.ToLowerInvariant() switch
+        {
+            "title" => descending
+                ? games.OrderByDescending(item => item.Game.Title).ThenBy(item => item.Game.Id)
+                : games.OrderBy(item => item.Game.Title).ThenBy(item => item.Game.Id),
+            "rating" => descending
+                ? games.OrderByDescending(item => item.Game.Rating).ThenBy(item => item.Game.Id)
+                : games.OrderBy(item => item.Game.Rating).ThenBy(item => item.Game.Id),
+            "createdat" => descending
+                ? games.OrderByDescending(item => item.Game.CreatedAt).ThenBy(item => item.Game.Id)
+                : games.OrderBy(item => item.Game.CreatedAt).ThenBy(item => item.Game.Id),
+            _ => descending
+                ? games.OrderByDescending(item => item.Game.UpdatedAt).ThenBy(item => item.Game.Id)
+                : games.OrderBy(item => item.Game.UpdatedAt).ThenBy(item => item.Game.Id)
+        };
+    }
+
+    private static bool IsSupportedSort(string sortBy) =>
+        sortBy.Equals("title", StringComparison.OrdinalIgnoreCase) ||
+        sortBy.Equals("rating", StringComparison.OrdinalIgnoreCase) ||
+        sortBy.Equals("createdAt", StringComparison.OrdinalIgnoreCase) ||
+        sortBy.Equals("updatedAt", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSupportedSortDirection(string sortDirection) =>
+        sortDirection.Equals("asc", StringComparison.OrdinalIgnoreCase) ||
+        sortDirection.Equals("desc", StringComparison.OrdinalIgnoreCase);
+
+    private sealed class GameListItem
+    {
+        public Game Game { get; init; } = null!;
+        public int Total { get; init; }
+        public int Completed { get; init; }
     }
 
     [HttpPost]

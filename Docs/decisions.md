@@ -62,3 +62,12 @@ dashboard summary data and a `RecentlyUpdatedGames` collection, but it does
 not prescribe a specific number of items. Five is an intentional small
 response-size choice for the dashboard, not a business rule. It can be
 changed later or made configurable if the UI needs a different limit.
+
+## Game-list pagination metadata
+
+The game-list endpoint keeps returning an array to remain compatible with the
+existing frontend contract. It accepts filtering, sorting, `page`, and
+`pageSize` query parameters, while pagination metadata is returned in
+`X-Total-Count`, `X-Page`, and `X-Page-Size` response headers. This adds
+pagination without forcing the current client to change from an array response
+to a wrapper object.
