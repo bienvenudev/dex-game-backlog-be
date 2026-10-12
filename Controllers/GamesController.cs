@@ -31,6 +31,10 @@ public class GamesController(
             (query.MinRating is not null &&
              query.MaxRating is not null &&
              query.MinRating > query.MaxRating) ||
+            (query.Platform is not null &&
+             !InputValidation.IsValidPlatform(query.Platform.Value)) ||
+            (query.Status is not null &&
+             !InputValidation.IsValidGameStatus(query.Status.Value)) ||
             !IsSupportedSort(query.SortBy) ||
             !IsSupportedSortDirection(query.SortDirection))
         {

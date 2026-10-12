@@ -173,6 +173,11 @@ The response remains an array for frontend compatibility. Pagination metadata
 is sent in headers, which lets newer clients paginate without changing the
 existing response body shape.
 
+Query-string binding converts values such as `platform=STEAM` and
+`pageSize=20` into the `GameQueryParameters` object. Data annotations validate
+simple ranges and formats, while explicit checks reject enum numbers that are
+technically representable by C# but are not supported by the API contract.
+
 ## Why request DTOs use `init`
 
 Request DTO properties use `get; init;` instead of `get; set;`. ASP.NET Core

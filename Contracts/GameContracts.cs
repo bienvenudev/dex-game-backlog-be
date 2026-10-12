@@ -52,16 +52,35 @@ public sealed record GameSummaryResponse(
 
 public sealed record GameQueryParameters
 {
+    [StringLength(200)]
     public string? Search { get; init; }
+
+    [EnumDataType(typeof(Platform))]
     public Platform? Platform { get; init; }
+
+    [EnumDataType(typeof(GameStatus))]
     public GameStatus? Status { get; init; }
+
+    [Range(1, 10)]
     public int? MinRating { get; init; }
+
+    [Range(1, 10)]
     public int? MaxRating { get; init; }
+
     public bool? HasObjectives { get; init; }
     public bool? FullyComplete { get; init; }
+
+    [RegularExpression("^(title|rating|createdAt|updatedAt)$",
+        MatchTimeoutInMilliseconds = 100)]
     public string SortBy { get; init; } = "updatedAt";
+
+    [RegularExpression("^(asc|desc)$", MatchTimeoutInMilliseconds = 100)]
     public string SortDirection { get; init; } = "desc";
+
+    [Range(1, 100000)]
     public int Page { get; init; } = 1;
+
+    [Range(1, 100)]
     public int PageSize { get; init; } = 20;
 }
 
