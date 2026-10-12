@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace DexGameBacklog.Api.Contracts;
 
 public enum Platform
@@ -65,25 +67,41 @@ public sealed record GameDetailResponse(
     ProgressResponse Progress);
 
 public sealed record GameInput(
+    [property: Required]
+    [property: StringLength(200)]
     string Title,
+    [property: EnumDataType(typeof(Platform))]
     Platform Platform,
+    [property: EnumDataType(typeof(GameStatus))]
     GameStatus Status,
+    [property: Range(1, 10)]
     int? Rating,
+    [property: StringLength(4000)]
     string? Notes,
+    [property: StringLength(2048)]
     string? CoverUrl,
+    [property: StringLength(2048)]
     string? BackgroundUrl);
 
-public sealed record ObjectiveInput(string Label);
+public sealed record ObjectiveInput(
+    [property: Required]
+    [property: StringLength(200)]
+    string Label);
 
 public sealed record StatusUpdateInput(
+    [property: EnumDataType(typeof(GameStatus))]
     GameStatus Status,
+    [property: StringLength(500)]
     string? Comment);
 
 public sealed record StatusUpdateResponse(
     GameSummaryResponse Game,
     bool HasOutstandingObjectives);
 
-public sealed record ObjectiveUpdateInput(string Label);
+public sealed record ObjectiveUpdateInput(
+    [property: Required]
+    [property: StringLength(200)]
+    string Label);
 
 public sealed record ObjectiveOrderInput(
     IReadOnlyList<Guid> ObjectiveIds);

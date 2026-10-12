@@ -142,3 +142,15 @@ errors are less useful to an API client than a deliberate validation response.
 
 The validation helper is shared by the game and objective controllers so the
 same limits are not reimplemented differently in each endpoint.
+
+## DTO validation versus database configuration
+
+Data-annotation attributes on request DTOs validate the incoming HTTP payload.
+For example, `[Required]` rejects a missing title and `[StringLength(200)]`
+rejects an oversized label before the controller performs its work.
+
+EF Core configuration protects the database schema, even if data reaches the
+database through another path. Controller or service validation remains
+necessary for rules that need application context, such as uniqueness,
+ownership, rating conditions, and allowed status transitions. These layers
+overlap intentionally but serve different boundaries.
