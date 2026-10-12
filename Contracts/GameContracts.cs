@@ -66,42 +66,57 @@ public sealed record GameDetailResponse(
     IReadOnlyList<ObjectiveResponse> Objectives,
     ProgressResponse Progress);
 
-public sealed record GameInput(
-    [property: Required]
-    [property: StringLength(200)]
-    string Title,
-    [property: EnumDataType(typeof(Platform))]
-    Platform Platform,
-    [property: EnumDataType(typeof(GameStatus))]
-    GameStatus Status,
-    [property: Range(1, 10)]
-    int? Rating,
-    [property: StringLength(4000)]
-    string? Notes,
-    [property: StringLength(2048)]
-    string? CoverUrl,
-    [property: StringLength(2048)]
-    string? BackgroundUrl);
+public sealed record GameInput
+{
+    [Required]
+    [StringLength(200)]
+    public string Title { get; init; } = string.Empty;
 
-public sealed record ObjectiveInput(
-    [property: Required]
-    [property: StringLength(200)]
-    string Label);
+    [EnumDataType(typeof(Platform))]
+    public Platform Platform { get; init; }
 
-public sealed record StatusUpdateInput(
-    [property: EnumDataType(typeof(GameStatus))]
-    GameStatus Status,
-    [property: StringLength(500)]
-    string? Comment);
+    [EnumDataType(typeof(GameStatus))]
+    public GameStatus Status { get; init; }
+
+    [Range(1, 10)]
+    public int? Rating { get; init; }
+
+    [StringLength(4000)]
+    public string? Notes { get; init; }
+
+    [StringLength(2048)]
+    public string? CoverUrl { get; init; }
+
+    [StringLength(2048)]
+    public string? BackgroundUrl { get; init; }
+}
+
+public sealed record ObjectiveInput
+{
+    [Required]
+    [StringLength(200)]
+    public string Label { get; init; } = string.Empty;
+}
+
+public sealed record StatusUpdateInput
+{
+    [EnumDataType(typeof(GameStatus))]
+    public GameStatus Status { get; init; }
+
+    [StringLength(500)]
+    public string? Comment { get; init; }
+}
 
 public sealed record StatusUpdateResponse(
     GameSummaryResponse Game,
     bool HasOutstandingObjectives);
 
-public sealed record ObjectiveUpdateInput(
-    [property: Required]
-    [property: StringLength(200)]
-    string Label);
+public sealed record ObjectiveUpdateInput
+{
+    [Required]
+    [StringLength(200)]
+    public string Label { get; init; } = string.Empty;
+}
 
 public sealed record ObjectiveOrderInput(
     IReadOnlyList<Guid> ObjectiveIds);

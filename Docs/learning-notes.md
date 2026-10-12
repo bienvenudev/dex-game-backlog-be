@@ -154,3 +154,17 @@ database through another path. Controller or service validation remains
 necessary for rules that need application context, such as uniqueness,
 ownership, rating conditions, and allowed status transitions. These layers
 overlap intentionally but serve different boundaries.
+
+Request DTOs use records with explicit properties rather than positional
+parameters. This lets attributes such as `[Required]` and `[StringLength]` be
+placed directly on the properties that ASP.NET Core validates. Positional
+records are still useful for response DTOs because those responses do not need
+input validation.
+
+## Why request DTOs use `init`
+
+Request DTO properties use `get; init;` instead of `get; set;`. ASP.NET Core
+can populate the object during model binding, but application code cannot
+accidentally change the request values afterward. This makes the input
+snapshot effectively read-only once it has been created. It is different from
+`get; set;`, which permits mutation at any time.
