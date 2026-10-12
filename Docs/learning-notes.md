@@ -178,6 +178,13 @@ Query-string binding converts values such as `platform=STEAM` and
 simple ranges and formats, while explicit checks reject enum numbers that are
 technically representable by C# but are not supported by the API contract.
 
+## Keeping status rules outside the controller
+
+The allowed status transitions are a business rule, not an HTTP concern.
+`StatusTransitionRules` keeps that rule reusable and independently testable,
+while `GamesController` remains responsible for translating the result into
+HTTP responses such as `409 Conflict`.
+
 ## Why request DTOs use `init`
 
 Request DTO properties use `get; init;` instead of `get; set;`. ASP.NET Core

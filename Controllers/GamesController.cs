@@ -585,7 +585,7 @@ public class GamesController(
             });
         }
 
-        if (!IsAllowedTransition(game.Status, requestedStatus))
+        if (!StatusTransitionRules.IsAllowed(game.Status, requestedStatus))
         {
             return Conflict(new
             {
@@ -672,27 +672,4 @@ public class GamesController(
         return Ok(new StatusUpdateResponse(gameResponse, outstandingObjectives));
     }
 
-    private static bool IsAllowedTransition(
-        DomainGameStatus currentStatus,
-        DomainGameStatus requestedStatus)
-    {
-        return currentStatus switch
-        {
-            DomainGameStatus.UNPLAYED =>
-                requestedStatus is DomainGameStatus.PLAYING or
-                    DomainGameStatus.FINISHED or
-                    DomainGameStatus.ABANDONED,
-            DomainGameStatus.PLAYING =>
-                requestedStatus is DomainGameStatus.FINISHED or
-                    DomainGameStatus.ABANDONED or
-                    DomainGameStatus.UNPLAYED,
-            DomainGameStatus.FINISHED =>
-                requestedStatus is DomainGameStatus.PLAYING or
-                    DomainGameStatus.ABANDONED,
-            DomainGameStatus.ABANDONED =>
-                requestedStatus is DomainGameStatus.PLAYING or
-                    DomainGameStatus.FINISHED,
-            _ => false
-        };
-    }
 }
