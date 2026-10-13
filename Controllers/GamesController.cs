@@ -17,7 +17,8 @@ namespace DexGameBacklog.Api.Controllers;
 [Route("api/[controller]")]
 public class GamesController(
     AppDbContext dbContext,
-    ICurrentUser currentUser) : ControllerBase
+    ICurrentUser currentUser,
+    IGameStatusEventPublisher statusEventPublisher) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<GameSummaryResponse>>> Get(
@@ -676,6 +677,16 @@ public class GamesController(
         dbContext.GameStatusHistories.Add(history);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
+        await statusEventPublisher.PublishAsync(
+            new GameStatusChangedEvent(
+                game.Id,
+                userId,
+                previousStatus,
+                requestedStatus,
+                now,
+                history.Comment),
+            cancellationToken);
 
         var progress = await dbContext.Objectives
             .AsNoTracking()

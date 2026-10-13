@@ -38,7 +38,10 @@ public sealed class TransactionalGameCreationTests(PostgresDatabaseFixture fixtu
             });
             await context.SaveChangesAsync();
 
-            var controller = new GamesController(context, new TestCurrentUser(userId));
+            var controller = new GamesController(
+                context,
+                new TestCurrentUser(userId),
+                new NoOpGameStatusEventPublisher());
             var action = await controller.Create(input, CancellationToken.None);
             var response = Assert.IsType<ObjectResult>(action.Result);
 
@@ -86,7 +89,10 @@ public sealed class TransactionalGameCreationTests(PostgresDatabaseFixture fixtu
             });
             await context.SaveChangesAsync();
 
-            var controller = new GamesController(context, new TestCurrentUser(userId));
+            var controller = new GamesController(
+                context,
+                new TestCurrentUser(userId),
+                new NoOpGameStatusEventPublisher());
             var action = await controller.Create(input, CancellationToken.None);
             var response = Assert.IsType<BadRequestObjectResult>(action.Result);
 
