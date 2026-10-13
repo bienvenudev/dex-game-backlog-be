@@ -227,6 +227,24 @@ public class GamesController(
             });
         }
 
+        var objectiveInputs = input.Objectives ?? [];
+        var objectiveLabels = objectiveInputs
+            .Select(objective => objective?.Label?.Trim() ?? string.Empty)
+            .ToList();
+
+        if (objectiveInputs.Any(objective => objective is null) ||
+            objectiveLabels.Any(string.IsNullOrWhiteSpace) ||
+            objectiveLabels.Any(label => label.Length > 200) ||
+            objectiveLabels.Count != objectiveLabels
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count())
+        {
+            return BadRequest(new
+            {
+                message = "Objective labels are required, must be at most 200 characters, and must be unique."
+            });
+        }
+
         var isDuplicate = await dbContext.Games
             .AsNoTracking()
             .AnyAsync(g => g.UserId == userId &&
@@ -266,8 +284,24 @@ public class GamesController(
                 : null
         };
 
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            cancellationToken);
+
         dbContext.Games.Add(newGame);
+        dbContext.Objectives.AddRange(
+            objectiveLabels.Select((label, index) => new Objective
+            {
+                Id = Guid.NewGuid(),
+                GameId = newGame.Id,
+                Label = label,
+                Completed = false,
+                Position = index + 1,
+                CreatedAt = now,
+                UpdatedAt = now
+            }));
+
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         var response = new GameSummaryResponse(
             newGame.Id,
@@ -282,7 +316,10 @@ public class GamesController(
             newGame.FinishedAt,
             newGame.CreatedAt,
             newGame.UpdatedAt,
-            new ProgressResponse(Completed: 0, Total: 0, Percentage: null)
+            new ProgressResponse(
+                Completed: 0,
+                Total: objectiveLabels.Count,
+                Percentage: objectiveLabels.Count == 0 ? null : 0)
         );
 
         return StatusCode(StatusCodes.Status201Created, response);

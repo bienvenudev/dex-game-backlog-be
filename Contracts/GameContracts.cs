@@ -123,6 +123,8 @@ public sealed record GameInput
 
     [StringLength(2048)]
     public string? BackgroundUrl { get; init; }
+
+    public IReadOnlyList<ObjectiveInput>? Objectives { get; init; }
 }
 
 public sealed record ObjectiveInput
