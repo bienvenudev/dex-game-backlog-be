@@ -192,3 +192,13 @@ can populate the object during model binding, but application code cannot
 accidentally change the request values afterward. This makes the input
 snapshot effectively read-only once it has been created. It is different from
 `get; set;`, which permits mutation at any time.
+
+## Testing a business rule directly
+
+`StatusTransitionRulesTests` tests the transition table without starting the
+web server or connecting to PostgreSQL. This is a unit test: it supplies
+status values, calls the rule, and checks the boolean result.
+
+The tests cover allowed transitions, rejected transitions, and unchanged
+status. Controller tests will later verify that these results become the
+correct HTTP responses, such as `409 Conflict`.
