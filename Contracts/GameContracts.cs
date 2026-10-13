@@ -70,7 +70,7 @@ public sealed record GameQueryParameters
     public bool? HasObjectives { get; init; }
     public bool? FullyComplete { get; init; }
 
-    [RegularExpression("^(title|rating|createdAt|updatedAt)$",
+    [RegularExpression("^(title|rating|progress|createdAt|updatedAt)$",
         MatchTimeoutInMilliseconds = 100)]
     public string SortBy { get; init; } = "updatedAt";
 

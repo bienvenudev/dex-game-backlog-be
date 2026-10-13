@@ -158,6 +158,13 @@ public class GamesController(
             "rating" => descending
                 ? games.OrderByDescending(item => item.Game.Rating).ThenBy(item => item.Game.Id)
                 : games.OrderBy(item => item.Game.Rating).ThenBy(item => item.Game.Id),
+            "progress" => descending
+                ? games.OrderByDescending(item =>
+                        item.Total == 0 ? 0 : item.Completed * 100.0 / item.Total)
+                    .ThenBy(item => item.Game.Id)
+                : games.OrderBy(item =>
+                        item.Total == 0 ? 0 : item.Completed * 100.0 / item.Total)
+                    .ThenBy(item => item.Game.Id),
             "createdat" => descending
                 ? games.OrderByDescending(item => item.Game.CreatedAt).ThenBy(item => item.Game.Id)
                 : games.OrderBy(item => item.Game.CreatedAt).ThenBy(item => item.Game.Id),
@@ -170,6 +177,7 @@ public class GamesController(
     private static bool IsSupportedSort(string sortBy) =>
         sortBy.Equals("title", StringComparison.OrdinalIgnoreCase) ||
         sortBy.Equals("rating", StringComparison.OrdinalIgnoreCase) ||
+        sortBy.Equals("progress", StringComparison.OrdinalIgnoreCase) ||
         sortBy.Equals("createdAt", StringComparison.OrdinalIgnoreCase) ||
         sortBy.Equals("updatedAt", StringComparison.OrdinalIgnoreCase);
 
