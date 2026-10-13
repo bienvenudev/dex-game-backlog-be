@@ -1,5 +1,6 @@
 using DexGameBacklog.Api.Contracts;
 using DexGameBacklog.Api.Data;
+using DexGameBacklog.Api.Mapping;
 using DexGameBacklog.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -74,19 +75,8 @@ public class DashboardController(
             GamesWithNoObjectives: gamesWithNoObjectives,
             AverageRating: averageRating,
             RecentlyUpdatedGames: games
-                .Select(item => new GameSummaryResponse(
-                    item.Game.Id,
-                    item.Game.Title,
-                    (Platform)item.Game.Platform,
-                    (GameStatus)item.Game.Status,
-                    item.Game.Rating,
-                    item.Game.Notes,
-                    item.Game.CoverUrl,
-                    item.Game.BackgroundUrl,
-                    item.Game.StartedAt,
-                    item.Game.FinishedAt,
-                    item.Game.CreatedAt,
-                    item.Game.UpdatedAt,
+                .Select(item => ResponseMapper.ToSummary(
+                    item.Game,
                     ProgressCalculator.Calculate(item.Completed, item.Total)))
                 .ToList());
 

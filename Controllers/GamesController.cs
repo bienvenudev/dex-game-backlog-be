@@ -1,6 +1,7 @@
 using DexGameBacklog.Api.Contracts;
 using DexGameBacklog.Api.Data;
 using DexGameBacklog.Api.Domain;
+using DexGameBacklog.Api.Mapping;
 using DexGameBacklog.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -119,19 +120,8 @@ public class GamesController(
         var response = games
             .Select(item =>
             {
-                return new GameSummaryResponse(
-                    item.Game.Id,
-                    item.Game.Title,
-                    (ContractPlatform)item.Game.Platform,
-                    (ContractGameStatus)item.Game.Status,
-                    item.Game.Rating,
-                    item.Game.Notes,
-                    item.Game.CoverUrl,
-                    item.Game.BackgroundUrl,
-                    item.Game.StartedAt,
-                    item.Game.FinishedAt,
-                    item.Game.CreatedAt,
-                    item.Game.UpdatedAt,
+                return ResponseMapper.ToSummary(
+                    item.Game,
                     ProgressCalculator.Calculate(item.Completed, item.Total));
             })
             .ToList();
@@ -312,24 +302,12 @@ public class GamesController(
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        var response = new GameSummaryResponse(
-            newGame.Id,
-            newGame.Title,
-            (ContractPlatform)newGame.Platform,
-            (ContractGameStatus)newGame.Status,
-            newGame.Rating,
-            newGame.Notes,
-            newGame.CoverUrl,
-            newGame.BackgroundUrl,
-            newGame.StartedAt,
-            newGame.FinishedAt,
-            newGame.CreatedAt,
-            newGame.UpdatedAt,
+        var response = ResponseMapper.ToSummary(
+            newGame,
             new ProgressResponse(
                 Completed: 0,
                 Total: objectiveLabels.Count,
-                Percentage: objectiveLabels.Count == 0 ? null : 0)
-        );
+                Percentage: objectiveLabels.Count == 0 ? null : 0));
 
         return StatusCode(StatusCodes.Status201Created, response);
     }
@@ -375,15 +353,7 @@ public class GamesController(
             game.FinishedAt,
             game.CreatedAt,
             game.UpdatedAt,
-            objectives.Select(objective => new ObjectiveResponse(
-                objective.Id,
-                objective.GameId,
-                objective.Label,
-                objective.Completed,
-                objective.Position,
-                objective.CompletedAt,
-                objective.CreatedAt,
-                objective.UpdatedAt)).ToList(),
+            objectives.Select(ResponseMapper.ToObjective).ToList(),
             ProgressCalculator.Calculate(completed, total));
 
         return Ok(response);
@@ -405,18 +375,7 @@ public class GamesController(
             return NotFound(new { message = "Game not found." });
         }
 
-        var progress = await dbContext.Objectives
-            .AsNoTracking()
-            .Where(objective => objective.GameId == gameId)
-            .GroupBy(objective => objective.GameId)
-            .Select(group => new
-            {
-                Total = group.Count(),
-                Completed = group.Count(objective => objective.Completed)
-            })
-            .SingleOrDefaultAsync(cancellationToken);
-
-        return Ok(ProgressCalculator.Calculate(progress?.Completed ?? 0, progress?.Total ?? 0));
+        return Ok(await GameProgressQuery.GetAsync(dbContext, gameId, cancellationToken));
     }
 
     [HttpGet("{gameId:guid}/history")]
@@ -544,33 +503,9 @@ public class GamesController(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var progress = await dbContext.Objectives
-            .Where(objective => objective.GameId == game.Id)
-            .GroupBy(objective => objective.GameId)
-            .Select(group => new
-            {
-                Total = group.Count(),
-                Completed = group.Count(objective => objective.Completed)
-            })
-            .SingleOrDefaultAsync(cancellationToken);
+        var progress = await GameProgressQuery.GetAsync(dbContext, game.Id, cancellationToken);
 
-        var total = progress?.Total ?? 0;
-        var completed = progress?.Completed ?? 0;
-
-        return Ok(new GameSummaryResponse(
-            game.Id,
-            game.Title,
-            (ContractPlatform)game.Platform,
-            (ContractGameStatus)game.Status,
-            game.Rating,
-            game.Notes,
-            game.CoverUrl,
-            game.BackgroundUrl,
-            game.StartedAt,
-            game.FinishedAt,
-            game.CreatedAt,
-            game.UpdatedAt,
-            ProgressCalculator.Calculate(completed, total)));
+        return Ok(ResponseMapper.ToSummary(game, progress));
     }
 
     [HttpDelete("{gameId:guid}")]
@@ -696,34 +631,9 @@ public class GamesController(
                 history.Comment),
             cancellationToken);
 
-        var progress = await dbContext.Objectives
-            .AsNoTracking()
-            .Where(objective => objective.GameId == game.Id)
-            .GroupBy(objective => objective.GameId)
-            .Select(group => new
-            {
-                Total = group.Count(),
-                Completed = group.Count(objective => objective.Completed)
-            })
-            .SingleOrDefaultAsync(cancellationToken);
+        var progress = await GameProgressQuery.GetAsync(dbContext, game.Id, cancellationToken);
 
-        var total = progress?.Total ?? 0;
-        var completed = progress?.Completed ?? 0;
-
-        var gameResponse = new GameSummaryResponse(
-            game.Id,
-            game.Title,
-            (ContractPlatform)game.Platform,
-            (ContractGameStatus)game.Status,
-            game.Rating,
-            game.Notes,
-            game.CoverUrl,
-            game.BackgroundUrl,
-            game.StartedAt,
-            game.FinishedAt,
-            game.CreatedAt,
-            game.UpdatedAt,
-            ProgressCalculator.Calculate(completed, total));
+        var gameResponse = ResponseMapper.ToSummary(game, progress);
 
         return Ok(new StatusUpdateResponse(gameResponse, outstandingObjectives));
     }

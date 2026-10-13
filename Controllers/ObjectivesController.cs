@@ -1,6 +1,7 @@
 using DexGameBacklog.Api.Contracts;
 using DexGameBacklog.Api.Data;
 using DexGameBacklog.Api.Domain;
+using DexGameBacklog.Api.Mapping;
 using DexGameBacklog.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -132,15 +133,7 @@ public class ObjectivesController(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return Ok(new ObjectiveResponse(
-            objective.Id,
-            objective.GameId,
-            objective.Label,
-            objective.Completed,
-            objective.Position,
-            objective.CompletedAt,
-            objective.CreatedAt,
-            objective.UpdatedAt));
+        return Ok(ResponseMapper.ToObjective(objective));
     }
 
     [HttpPatch("{objectiveId:guid}/complete")]
@@ -165,15 +158,7 @@ public class ObjectivesController(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return Ok(new ObjectiveResponse(
-            objective.Id,
-            objective.GameId,
-            objective.Label,
-            objective.Completed,
-            objective.Position,
-            objective.CompletedAt,
-            objective.CreatedAt,
-            objective.UpdatedAt));
+        return Ok(ResponseMapper.ToObjective(objective));
     }
 
     [HttpPatch("{objectiveId:guid}/reopen")]
@@ -196,15 +181,7 @@ public class ObjectivesController(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return Ok(new ObjectiveResponse(
-            objective.Id,
-            objective.GameId,
-            objective.Label,
-            objective.Completed,
-            objective.Position,
-            objective.CompletedAt,
-            objective.CreatedAt,
-            objective.UpdatedAt));
+        return Ok(ResponseMapper.ToObjective(objective));
     }
 
     [HttpDelete("{objectiveId:guid}")]
@@ -283,15 +260,7 @@ public class ObjectivesController(
 
         var response = requestedIds
             .Select(objectiveId => objectivesById[objectiveId])
-            .Select(objective => new ObjectiveResponse(
-                objective.Id,
-                objective.GameId,
-                objective.Label,
-                objective.Completed,
-                objective.Position,
-                objective.CompletedAt,
-                objective.CreatedAt,
-                objective.UpdatedAt))
+            .Select(ResponseMapper.ToObjective)
             .ToList();
 
         return Ok(response);
@@ -364,15 +333,7 @@ public class ObjectivesController(
         dbContext.Objectives.Add(objectiveEntity);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var response = new ObjectiveResponse(
-            objectiveEntity.Id,
-            objectiveEntity.GameId,
-            objectiveEntity.Label,
-            objectiveEntity.Completed,
-            objectiveEntity.Position,
-            objectiveEntity.CompletedAt,
-            objectiveEntity.CreatedAt,
-            objectiveEntity.UpdatedAt);
+        var response = ResponseMapper.ToObjective(objectiveEntity);
 
         return StatusCode(StatusCodes.Status201Created, response);
     }
