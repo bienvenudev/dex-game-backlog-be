@@ -19,29 +19,32 @@ public sealed class DevelopmentAuthService(
         LoginRequest request,
         CancellationToken cancellationToken = default)
     {
-        var expectedUsername = configuration["Authentication:Username"]
-                               ?? throw new InvalidOperationException(
-                                   "Authentication:Username is not configured.");
-        var expectedPassword = configuration["Authentication:Password"]
-                               ?? throw new InvalidOperationException(
-                                   "Authentication:Password is not configured.");
+        // Accounts come from the Authentication:Users list in configuration.
+        var account = configuration.GetSection("Authentication:Users")
+            .GetChildren()
+            .FirstOrDefault(section =>
+                section["Username"] == request.Username &&
+                section["Password"] == request.Password);
 
-        if (request.Username != expectedUsername ||
-            request.Password != expectedPassword)
+        if (account is null)
         {
             return null;
         }
 
+        var username = account["Username"]
+                       ?? throw new InvalidOperationException(
+                           "An Authentication:Users entry has no Username.");
+
         var user = await dbContext.Users
             .SingleOrDefaultAsync(
-                candidate => candidate.Username == expectedUsername,
+                candidate => candidate.Username == username,
                 cancellationToken);
         if (user is null)
         {
             user = new User
             {
                 Id = Guid.NewGuid(),
-                Username = expectedUsername
+                Username = username
             };
 
             dbContext.Users.Add(user);
@@ -69,6 +72,7 @@ public sealed class DevelopmentAuthService(
 
         return new LoginResponse(
             new JwtSecurityTokenHandler().WriteToken(token),
-            expiresAt);
+            expiresAt,
+            user.Username);
     }
 }

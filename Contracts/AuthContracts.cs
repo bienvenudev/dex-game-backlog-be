@@ -6,4 +6,5 @@ public sealed record LoginRequest(
 
 public sealed record LoginResponse(
     string AccessToken,
-    DateTimeOffset ExpiresAt);
+    DateTimeOffset ExpiresAt,
+    string Username);
