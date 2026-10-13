@@ -66,4 +66,27 @@ dotnet run
 dotnet test
 ```
 
-The implementation will continue after this initial pull request.
+## Local development setup
+
+Secrets are kept out of the repository with .NET user secrets. Set these once
+per machine, from the project folder:
+
+```bash
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "<postgres connection string>"
+dotnet user-secrets set "Jwt:Key" "<any long random string>"
+dotnet user-secrets set "Authentication:Users:0:Username" "ben"
+dotnet user-secrets set "Authentication:Users:0:Password" "<password>"
+dotnet user-secrets set "Authentication:Users:1:Username" "jane"
+dotnet user-secrets set "Authentication:Users:1:Password" "<password>"
+```
+
+Apply migrations before the first run:
+
+```bash
+dotnet ef database update
+```
+
+In Development, startup adds sample data: games 1-8 belong to `ben` and games
+9-12 belong to `jane`. Restarting the app never duplicates it. Log in as
+either user at `POST /api/auth/login` to see that users only see their own
+games.

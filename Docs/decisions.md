@@ -44,15 +44,36 @@ reached, while the database limit remains a second line of defense.
 
 ## Development authentication and token lifetime
 
-The first authentication slice uses one configured development account and
-issues a signed JWT containing the user's database ID and name. This lets us
-exercise authenticated ownership now without pretending that registration and
-password management are complete.
+The authentication slice reads a list of development accounts from
+`Authentication:Users` in user secrets and issues a signed JWT containing the
+user's database ID and name. The login response also returns the username so
+the frontend can show who is signed in. This lets us exercise authenticated
+ownership now without pretending that registration and password management are
+complete.
 
 Development tokens currently expire after eight hours. This is a temporary
 convenience choice and should become configuration-driven before deployment.
 Production authentication will require password hashing, secret management,
 username uniqueness, and a deliberate token/refresh-token policy.
+
+## Development seed data
+
+In Development, `DevelopmentSeeder` adds sample games and objectives so the
+frontend has data to show. Games 1-8 belong to `ben` and games 9-12 belong to
+`jane`, which lets us demonstrate ownership isolation (jane gets `404` on
+ben's games).
+
+The seeder runs at startup, creates a configured user if it's missing, and
+skips any user who already has games, so restarts never duplicate data. It
+uses fresh GUIDs and maps the frontend's old string ids onto them.
+
+We chose startup seeding over EF Core's `HasData`. `HasData` stores the rows in
+a migration, which needs fixed GUIDs and users that exist before the migration
+runs. A startup seeder keeps sample data out of the schema history and is
+easy to remove before deployment.
+
+The seeder runs only in Development and assumes the database is already
+migrated.
 
 ## Dashboard recent-games limit
 

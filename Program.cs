@@ -72,6 +72,12 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
+    await using (var scope = app.Services.CreateAsyncScope())
+    {
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await DevelopmentSeeder.SeedAsync(dbContext, app.Configuration);
+    }
+
     app.MapOpenApi();
     app.UseSwagger();
     app.UseSwaggerUI();
