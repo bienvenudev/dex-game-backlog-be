@@ -190,40 +190,10 @@ public class GamesController(
         var userId = currentUser.UserId;
         var title = input.Title?.Trim() ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(title))
+        var inputError = GameInputValidator.Validate(input);
+        if (inputError is not null)
         {
-            return BadRequest(new { message = "Title is required." });
-        }
-
-        if (title.Length > 200 ||
-            !InputValidation.IsValidPlatform(input.Platform) ||
-            !InputValidation.IsValidGameStatus(input.Status) ||
-            !InputValidation.IsValidText(input.Notes, 4000) ||
-            !InputValidation.IsValidText(input.CoverUrl, 2048) ||
-            !InputValidation.IsValidText(input.BackgroundUrl, 2048))
-        {
-            return BadRequest(new
-            {
-                message = "One or more game fields are invalid or too long."
-            });
-        }
-
-        if (input.Rating is not null &&
-            (input.Rating < 1 || input.Rating > 10))
-        {
-            return BadRequest(new
-            {
-                message = "Rating must be a whole number from 1 to 10."
-            });
-        }
-
-        if (input.Status == ContractGameStatus.UNPLAYED &&
-            input.Rating is not null)
-        {
-            return BadRequest(new
-            {
-                message = "An unplayed game cannot have a rating."
-            });
+            return BadRequest(new { message = inputError });
         }
 
         var objectiveInputs = input.Objectives ?? [];
@@ -420,40 +390,10 @@ public class GamesController(
         var userId = currentUser.UserId;
         var title = input.Title?.Trim() ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(title))
+        var inputError = GameInputValidator.Validate(input);
+        if (inputError is not null)
         {
-            return BadRequest(new { message = "Title is required." });
-        }
-
-        if (title.Length > 200 ||
-            !InputValidation.IsValidPlatform(input.Platform) ||
-            !InputValidation.IsValidGameStatus(input.Status) ||
-            !InputValidation.IsValidText(input.Notes, 4000) ||
-            !InputValidation.IsValidText(input.CoverUrl, 2048) ||
-            !InputValidation.IsValidText(input.BackgroundUrl, 2048))
-        {
-            return BadRequest(new
-            {
-                message = "One or more game fields are invalid or too long."
-            });
-        }
-
-        if (input.Rating is not null &&
-            (input.Rating < 1 || input.Rating > 10))
-        {
-            return BadRequest(new
-            {
-                message = "Rating must be a whole number from 1 to 10."
-            });
-        }
-
-        if (input.Status == ContractGameStatus.UNPLAYED &&
-            input.Rating is not null)
-        {
-            return BadRequest(new
-            {
-                message = "An unplayed game cannot have a rating."
-            });
+            return BadRequest(new { message = inputError });
         }
 
         var game = await dbContext.Games
