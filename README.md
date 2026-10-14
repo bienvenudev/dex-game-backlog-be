@@ -90,3 +90,33 @@ In Development, startup adds sample data: games 1-8 belong to `ben` and games
 9-12 belong to `jane`. Restarting the app never duplicates it. Log in as
 either user at `POST /api/auth/login` to see that users only see their own
 games.
+
+## Testing
+
+Tests run against PostgreSQL, using a separate database from the development
+one so test data never touches the demo games.
+
+Create the test database, then point the tests at it with an environment
+variable. Use your own password:
+
+```bash
+TEST_DATABASE_CONNECTION_STRING="Host=localhost;Port=5432;Database=dex_game_backlog_test;Username=postgres;Password=<password>" dotnet test
+```
+
+In Rider, set the same variable in the test run configuration.
+
+How the tests are organised:
+
+- **Business rules and controller behaviour.** Most tests build a controller
+  directly, with a fake `ICurrentUser`, and call its action method. They check
+  the returned `ActionResult` and the database state.
+- **Pure rules.** `StatusTransitionRulesTests` and `ProgressCalculatorTests`
+  don't touch the database.
+- **Database fixture.** `PostgresDatabaseFixture` applies migrations once per
+  test run. Each test creates its own users with random names and removes them
+  at the end, so tests don't depend on each other.
+- **Cleanup.** A status history row restricts deletion of its user, so the
+  cleanup in `StatusHistoryTests` deletes those rows first.
+
+Not covered yet: full HTTP requests through the pipeline (routing, model
+validation, JSON). That needs integration tests.
