@@ -92,3 +92,15 @@ existing frontend contract. It accepts filtering, sorting, `page`, and
 `X-Total-Count`, `X-Page`, and `X-Page-Size` response headers. This adds
 pagination without forcing the current client to change from an array response
 to a wrapper object.
+
+## Status changes in a service
+
+The status-change rules (allowed transitions, `startedAt` and `finishedAt`
+timestamps, clearing the rating on `UNPLAYED`, the history row, and the
+published event) live in `GameStatusService`. `GamesController.UpdateStatus`
+only maps the service's outcome to an HTTP status code.
+
+The service is registered as a concrete scoped class, not behind an interface.
+A separate interface would only help if we needed a second implementation or a
+fake, and neither exists yet. We can introduce `IGameStatusService` later
+without changing the controller's behaviour.

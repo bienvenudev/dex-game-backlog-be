@@ -185,6 +185,11 @@ The allowed status transitions are a business rule, not an HTTP concern.
 while `GamesController` remains responsible for translating the result into
 HTTP responses such as `409 Conflict`.
 
+The controller receives `GameStatusService` through its constructor. ASP.NET
+Core's dependency injection container creates it, so the controller never calls
+`new` on it. `Program.cs` registers it with `AddScoped`, which means one
+instance per HTTP request, matching the scoped `AppDbContext` it depends on.
+
 ## Why request DTOs use `init`
 
 Request DTO properties use `get; init;` instead of `get; set;`. ASP.NET Core
