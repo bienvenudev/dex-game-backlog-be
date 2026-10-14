@@ -45,7 +45,7 @@ public sealed class StatusEventPublishingTests(PostgresDatabaseFixture fixture)
             var controller = new GamesController(
                 context,
                 new TestCurrentUser(userId),
-                publisher);
+                new GameStatusService(context, publisher));
 
             var action = await controller.UpdateStatus(
                 gameId,

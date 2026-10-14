@@ -45,7 +45,7 @@ public sealed class RatingStatusTests(PostgresDatabaseFixture fixture)
             var controller = new GamesController(
                 context,
                 new TestCurrentUser(userId),
-                new NoOpGameStatusEventPublisher());
+                new GameStatusService(context, new NoOpGameStatusEventPublisher()));
 
             var action = await controller.UpdateStatus(
                 gameId,

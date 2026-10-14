@@ -29,7 +29,7 @@ public sealed class OwnershipTests(PostgresDatabaseFixture fixture)
             var controller = new GamesController(
                 context,
                 new TestCurrentUser(otherId),
-                new NoOpGameStatusEventPublisher());
+                new GameStatusService(context, new NoOpGameStatusEventPublisher()));
 
             var action = await controller.GetById(game.Id, CancellationToken.None);
 
@@ -54,7 +54,7 @@ public sealed class OwnershipTests(PostgresDatabaseFixture fixture)
             var controller = new GamesController(
                 context,
                 new TestCurrentUser(otherId),
-                new NoOpGameStatusEventPublisher());
+                new GameStatusService(context, new NoOpGameStatusEventPublisher()));
 
             var action = await controller.Update(
                 game.Id,
@@ -87,7 +87,7 @@ public sealed class OwnershipTests(PostgresDatabaseFixture fixture)
             var controller = new GamesController(
                 context,
                 new TestCurrentUser(otherId),
-                new NoOpGameStatusEventPublisher());
+                new GameStatusService(context, new NoOpGameStatusEventPublisher()));
 
             var action = await controller.Delete(game.Id, CancellationToken.None);
 
@@ -167,7 +167,7 @@ public sealed class OwnershipTests(PostgresDatabaseFixture fixture)
             var controller = new GamesController(
                 context,
                 new TestCurrentUser(otherId),
-                new NoOpGameStatusEventPublisher())
+                new GameStatusService(context, new NoOpGameStatusEventPublisher()))
             {
                 ControllerContext = new ControllerContext
                 {

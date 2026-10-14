@@ -19,7 +19,7 @@ namespace DexGameBacklog.Api.Controllers;
 public class GamesController(
     AppDbContext dbContext,
     ICurrentUser currentUser,
-    IGameStatusEventPublisher statusEventPublisher) : ControllerBase
+    GameStatusService gameStatusService) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<GameSummaryResponse>>> Get(
@@ -214,12 +214,13 @@ public class GamesController(
             });
         }
 
-        var isDuplicate = await dbContext.Games
-            .AsNoTracking()
-            .AnyAsync(g => g.UserId == userId &&
-                           g.Title.ToLower() == title.ToLower() &&
-                           g.Platform == (DomainPlatform)input.Platform,
-                cancellationToken);
+        var isDuplicate = await UniquenessChecks.IsGameTitleTakenAsync(
+            dbContext,
+            userId,
+            title,
+            (DomainPlatform)input.Platform,
+            exceptGameId: null,
+            cancellationToken);
 
         if (isDuplicate)
         {
@@ -289,12 +290,7 @@ public class GamesController(
     {
         var userId = currentUser.UserId;
 
-        var game = await dbContext.Games
-            .AsNoTracking()
-            .SingleOrDefaultAsync(
-                candidate => candidate.Id == gameId &&
-                             candidate.UserId == userId,
-                cancellationToken);
+        var game = await OwnedRecords.FindGameAsync(dbContext, gameId, userId, cancellationToken);
 
         if (game is null)
         {
@@ -336,9 +332,7 @@ public class GamesController(
     {
         var userId = currentUser.UserId;
 
-        var gameExists = await dbContext.Games
-            .AsNoTracking()
-            .AnyAsync(game => game.Id == gameId && game.UserId == userId, cancellationToken);
+        var gameExists = await OwnedRecords.GameExistsAsync(dbContext, gameId, userId, cancellationToken);
 
         if (!gameExists)
         {
@@ -355,9 +349,7 @@ public class GamesController(
     {
         var userId = currentUser.UserId;
 
-        var gameExists = await dbContext.Games
-            .AsNoTracking()
-            .AnyAsync(game => game.Id == gameId && game.UserId == userId, cancellationToken);
+        var gameExists = await OwnedRecords.GameExistsAsync(dbContext, gameId, userId, cancellationToken);
 
         if (!gameExists)
         {
@@ -396,11 +388,7 @@ public class GamesController(
             return BadRequest(new { message = inputError });
         }
 
-        var game = await dbContext.Games
-            .SingleOrDefaultAsync(
-                candidate => candidate.Id == gameId &&
-                             candidate.UserId == userId,
-                cancellationToken);
+        var game = await OwnedRecords.FindGameAsync(dbContext, gameId, userId, cancellationToken);
 
         if (game is null)
         {
@@ -415,13 +403,13 @@ public class GamesController(
             });
         }
 
-        var isDuplicate = await dbContext.Games
-            .AsNoTracking()
-            .AnyAsync(candidate => candidate.UserId == userId &&
-                                   candidate.Id != gameId &&
-                                   candidate.Title.ToLower() == title.ToLower() &&
-                                   candidate.Platform == (DomainPlatform)input.Platform,
-                cancellationToken);
+        var isDuplicate = await UniquenessChecks.IsGameTitleTakenAsync(
+            dbContext,
+            userId,
+            title,
+            (DomainPlatform)input.Platform,
+            exceptGameId: gameId,
+            cancellationToken);
 
         if (isDuplicate)
         {
@@ -455,11 +443,7 @@ public class GamesController(
     {
         var userId = currentUser.UserId;
 
-        var game = await dbContext.Games
-            .SingleOrDefaultAsync(
-                candidate => candidate.Id == gameId &&
-                             candidate.UserId == userId,
-                cancellationToken);
+        var game = await OwnedRecords.FindGameAsync(dbContext, gameId, userId, cancellationToken);
 
         if (game is null)
         {
@@ -478,104 +462,29 @@ public class GamesController(
         [FromBody] StatusUpdateInput input,
         CancellationToken cancellationToken)
     {
-        var userId = currentUser.UserId;
-
-        var game = await dbContext.Games
-            .SingleOrDefaultAsync(
-                candidate => candidate.Id == gameId &&
-                             candidate.UserId == userId,
-                cancellationToken);
-
-        if (game is null)
-        {
-            return NotFound(new { message = "Game not found." });
-        }
-
-        var requestedStatus = (DomainGameStatus)input.Status;
-
-        if (!InputValidation.IsValidGameStatus(input.Status))
-        {
-            return BadRequest(new { message = "Status is invalid." });
-        }
-
-        if (game.Status == requestedStatus)
-        {
-            return Conflict(new
-            {
-                message = "The game already has this status."
-            });
-        }
-
-        if (!StatusTransitionRules.IsAllowed(game.Status, requestedStatus))
-        {
-            return Conflict(new
-            {
-                message = "This status transition is not allowed."
-            });
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        var previousStatus = game.Status;
-        game.Status = requestedStatus;
-
-        if (requestedStatus == DomainGameStatus.PLAYING &&
-            game.StartedAt is null)
-        {
-            game.StartedAt = now;
-        }
-
-        if (requestedStatus == DomainGameStatus.FINISHED)
-        {
-            game.FinishedAt = now;
-        }
-
-        if (requestedStatus == DomainGameStatus.UNPLAYED)
-        {
-            game.Rating = null;
-        }
-
-        game.UpdatedAt = now;
-
-        var history = new GameStatusHistory
-        {
-            Id = Guid.NewGuid(),
-            GameId = game.Id,
-            PreviousStatus = previousStatus,
-            NewStatus = requestedStatus,
-            ChangedBy = userId,
-            ChangedAt = now,
-            Comment = input.Comment?.Trim()
-        };
-
-        var outstandingObjectives = await dbContext.Objectives
-            .AsNoTracking()
-            .AnyAsync(
-                objective => objective.GameId == gameId &&
-                             !objective.Completed,
-                cancellationToken);
-
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+        var result = await gameStatusService.ChangeStatusAsync(
+            currentUser.UserId,
+            gameId,
+            input.Status,
+            input.Comment,
             cancellationToken);
 
-        dbContext.GameStatusHistories.Add(history);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+        switch (result.Outcome)
+        {
+            case StatusChangeOutcome.GameNotFound:
+                return NotFound(new { message = "Game not found." });
+            case StatusChangeOutcome.InvalidStatus:
+                return BadRequest(new { message = "Status is invalid." });
+            case StatusChangeOutcome.AlreadyHasStatus:
+                return Conflict(new { message = "The game already has this status." });
+            case StatusChangeOutcome.TransitionNotAllowed:
+                return Conflict(new { message = "This status transition is not allowed." });
+        }
 
-        await statusEventPublisher.PublishAsync(
-            new GameStatusChangedEvent(
-                game.Id,
-                userId,
-                previousStatus,
-                requestedStatus,
-                now,
-                history.Comment),
-            cancellationToken);
+        var progress = await GameProgressQuery.GetAsync(dbContext, gameId, cancellationToken);
 
-        var progress = await GameProgressQuery.GetAsync(dbContext, game.Id, cancellationToken);
-
-        var gameResponse = ResponseMapper.ToSummary(game, progress);
-
-        return Ok(new StatusUpdateResponse(gameResponse, outstandingObjectives));
+        return Ok(new StatusUpdateResponse(
+            ResponseMapper.ToSummary(result.Game!, progress),
+            result.HasOutstandingObjectives));
     }
-
 }

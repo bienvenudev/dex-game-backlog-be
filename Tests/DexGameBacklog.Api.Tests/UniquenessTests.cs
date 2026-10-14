@@ -27,7 +27,7 @@ public sealed class UniquenessTests(PostgresDatabaseFixture fixture)
             var controller = new GamesController(
                 context,
                 new TestCurrentUser(userId),
-                new NoOpGameStatusEventPublisher());
+                new GameStatusService(context, new NoOpGameStatusEventPublisher()));
 
             var action = await controller.Create(
                 new GameInput

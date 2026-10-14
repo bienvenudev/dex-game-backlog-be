@@ -23,11 +23,7 @@ public class ObjectivesController(
     {
         var userId = currentUser.UserId;
 
-        var gameExists = await dbContext.Games
-            .AsNoTracking()
-            .AnyAsync(
-                game => game.Id == gameId && game.UserId == userId,
-                cancellationToken);
+        var gameExists = await OwnedRecords.GameExistsAsync(dbContext, gameId, userId, cancellationToken);
 
         if (!gameExists)
         {
@@ -105,20 +101,19 @@ public class ObjectivesController(
             return BadRequest(new { message = "Label cannot exceed 200 characters." });
         }
 
-        var objective = await FindOwnedObjective(gameId, objectiveId, userId, cancellationToken);
+        var objective = await OwnedRecords.FindObjectiveAsync(dbContext, gameId, objectiveId, userId, cancellationToken);
 
         if (objective is null)
         {
             return NotFound(new { message = "Objective not found." });
         }
 
-        var duplicate = await dbContext.Objectives
-            .AsNoTracking()
-            .AnyAsync(
-                candidate => candidate.GameId == gameId &&
-                             candidate.Id != objectiveId &&
-                             candidate.Label.ToLower() == label.ToLower(),
-                cancellationToken);
+        var duplicate = await UniquenessChecks.IsObjectiveLabelTakenAsync(
+            dbContext,
+            gameId,
+            label,
+            exceptObjectiveId: objectiveId,
+            cancellationToken);
 
         if (duplicate)
         {
@@ -144,7 +139,7 @@ public class ObjectivesController(
     {
         var userId = currentUser.UserId;
 
-        var objective = await FindOwnedObjective(gameId, objectiveId, userId, cancellationToken);
+        var objective = await OwnedRecords.FindObjectiveAsync(dbContext, gameId, objectiveId, userId, cancellationToken);
 
         if (objective is null)
         {
@@ -167,7 +162,7 @@ public class ObjectivesController(
     {
         var userId = currentUser.UserId;
 
-        var objective = await FindOwnedObjective(gameId, objectiveId, userId, cancellationToken);
+        var objective = await OwnedRecords.FindObjectiveAsync(dbContext, gameId, objectiveId, userId, cancellationToken);
 
         if (objective is null)
         {
@@ -192,7 +187,7 @@ public class ObjectivesController(
     {
         var userId = currentUser.UserId;
 
-        var objective = await FindOwnedObjective(gameId, objectiveId, userId, cancellationToken);
+        var objective = await OwnedRecords.FindObjectiveAsync(dbContext, gameId, objectiveId, userId, cancellationToken);
 
         if (objective is null)
         {
@@ -213,11 +208,7 @@ public class ObjectivesController(
     {
         var userId = currentUser.UserId;
 
-        var gameExists = await dbContext.Games
-            .AsNoTracking()
-            .AnyAsync(
-                game => game.Id == gameId && game.UserId == userId,
-                cancellationToken);
+        var gameExists = await OwnedRecords.GameExistsAsync(dbContext, gameId, userId, cancellationToken);
 
         if (!gameExists)
         {
@@ -274,11 +265,7 @@ public class ObjectivesController(
     {
         var userId = currentUser.UserId;
 
-        var gameExists = await dbContext.Games
-            .AsNoTracking()
-            .AnyAsync(
-                game => game.Id == gameId && game.UserId == userId,
-                cancellationToken);
+        var gameExists = await OwnedRecords.GameExistsAsync(dbContext, gameId, userId, cancellationToken);
 
         if (!gameExists)
         {
@@ -297,12 +284,12 @@ public class ObjectivesController(
             return BadRequest(new { message = "Label cannot exceed 200 characters." });
         }
 
-        var duplicate = await dbContext.Objectives
-            .AsNoTracking()
-            .AnyAsync(
-                objective => objective.GameId == gameId &&
-                             objective.Label.ToLower() == label.ToLower(),
-                cancellationToken);
+        var duplicate = await UniquenessChecks.IsObjectiveLabelTakenAsync(
+            dbContext,
+            gameId,
+            label,
+            exceptObjectiveId: null,
+            cancellationToken);
 
         if (duplicate)
         {
@@ -336,17 +323,5 @@ public class ObjectivesController(
         var response = ResponseMapper.ToObjective(objectiveEntity);
 
         return StatusCode(StatusCodes.Status201Created, response);
-    }
-
-    private Task<Objective?> FindOwnedObjective(Guid gameId, Guid objectiveId, Guid userId,
-        CancellationToken cancellationToken)
-    {
-        return dbContext.Objectives
-            .SingleOrDefaultAsync(
-                candidate => candidate.Id == objectiveId &&
-                             candidate.GameId == gameId &&
-                             dbContext.Games.Any(game => game.Id == candidate.GameId &&
-                                                         game.UserId == userId),
-                cancellationToken);
     }
 }
