@@ -1,6 +1,7 @@
 using DexGameBacklog.Api.Contracts;
 using DexGameBacklog.Api.Data;
 using DexGameBacklog.Api.Domain;
+using DexGameBacklog.Api.Mapping;
 using DexGameBacklog.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,49 +18,168 @@ namespace DexGameBacklog.Api.Controllers;
 [Route("api/[controller]")]
 public class GamesController(
     AppDbContext dbContext,
-    ICurrentUser currentUser) : ControllerBase
+    ICurrentUser currentUser,
+    GameStatusService gameStatusService) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<GameSummaryResponse>>> Get(
-        CancellationToken cancellationToken) 
+        [FromQuery] GameQueryParameters query,
+        CancellationToken cancellationToken)
     {
+        if (query.Page < 1 ||
+            query.PageSize is < 1 or > 100 ||
+            query.MinRating is < 1 or > 10 ||
+            query.MaxRating is < 1 or > 10 ||
+            (query.MinRating is not null &&
+             query.MaxRating is not null &&
+             query.MinRating > query.MaxRating) ||
+            (query.Platform is not null &&
+             !InputValidation.IsValidPlatform(query.Platform.Value)) ||
+            (query.Status is not null &&
+             !InputValidation.IsValidGameStatus(query.Status.Value)) ||
+            !IsSupportedSort(query.SortBy) ||
+            !IsSupportedSortDirection(query.SortDirection))
+        {
+            return BadRequest(new
+            {
+                message = "One or more game list query parameters are invalid."
+            });
+        }
+
         var userId = currentUser.UserId;
 
-        var games = await dbContext.Games
+        var gamesQuery = dbContext.Games
             .AsNoTracking()
-            .Where(game => game.UserId == userId)
-            .Select(game => new
+            .Where(game => game.UserId == userId);
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim();
+            gamesQuery = gamesQuery.Where(game =>
+                EF.Functions.ILike(game.Title, $"%{search}%"));
+        }
+
+        if (query.Platform is not null)
+        {
+            gamesQuery = gamesQuery.Where(game =>
+                game.Platform == (DomainPlatform)query.Platform.Value);
+        }
+
+        if (query.Status is not null)
+        {
+            gamesQuery = gamesQuery.Where(game =>
+                game.Status == (DomainGameStatus)query.Status.Value);
+        }
+
+        if (query.MinRating is not null)
+        {
+            gamesQuery = gamesQuery.Where(game => game.Rating >= query.MinRating);
+        }
+
+        if (query.MaxRating is not null)
+        {
+            gamesQuery = gamesQuery.Where(game => game.Rating <= query.MaxRating);
+        }
+
+        var projectedGames = gamesQuery
+            .Select(game => new GameListItem
             {
                 Game = game,
-                Total = dbContext.Objectives.Count(
-                    objective => objective.GameId == game.Id),
-                Completed = dbContext.Objectives.Count(
-                    objective => objective.GameId == game.Id &&
-                                 objective.Completed)
-            })
+                Total = dbContext.Objectives.Count(objective => objective.GameId == game.Id),
+                Completed = dbContext.Objectives.Count(objective => objective.GameId == game.Id &&
+                                                                    objective.Completed)
+            });
+
+        if (query.HasObjectives is not null)
+        {
+            projectedGames = query.HasObjectives.Value
+                ? projectedGames.Where(item => item.Total > 0)
+                : projectedGames.Where(item => item.Total == 0);
+        }
+
+        if (query.FullyComplete is not null)
+        {
+            projectedGames = query.FullyComplete.Value
+                ? projectedGames.Where(item => item.Total > 0 &&
+                                               item.Completed == item.Total)
+                : projectedGames.Where(item => item.Total == 0 ||
+                                               item.Completed < item.Total);
+        }
+
+        projectedGames = ApplyGameOrdering(
+            projectedGames,
+            query.SortBy,
+            query.SortDirection);
+
+        var totalCount = await projectedGames.CountAsync(cancellationToken);
+        var games = await projectedGames
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
             .ToListAsync(cancellationToken);
 
         var response = games
             .Select(item =>
             {
-                return new GameSummaryResponse(
-                    item.Game.Id,
-                    item.Game.Title,
-                    (ContractPlatform)item.Game.Platform,
-                    (ContractGameStatus)item.Game.Status,
-                    item.Game.Rating,
-                    item.Game.Notes,
-                    item.Game.CoverUrl,
-                    item.Game.BackgroundUrl,
-                    item.Game.StartedAt,
-                    item.Game.FinishedAt,
-                    item.Game.CreatedAt,
-                    item.Game.UpdatedAt,
+                return ResponseMapper.ToSummary(
+                    item.Game,
                     ProgressCalculator.Calculate(item.Completed, item.Total));
             })
             .ToList();
 
+        Response.Headers.Append("X-Total-Count", totalCount.ToString());
+        Response.Headers.Append("X-Page", query.Page.ToString());
+        Response.Headers.Append("X-Page-Size", query.PageSize.ToString());
+
         return Ok(response);
+    }
+
+    private static IQueryable<GameListItem> ApplyGameOrdering(
+        IQueryable<GameListItem> games,
+        string sortBy,
+        string sortDirection)
+    {
+        var descending = sortDirection.Equals("desc", StringComparison.OrdinalIgnoreCase);
+
+        return sortBy.ToLowerInvariant() switch
+        {
+            "title" => descending
+                ? games.OrderByDescending(item => item.Game.Title).ThenBy(item => item.Game.Id)
+                : games.OrderBy(item => item.Game.Title).ThenBy(item => item.Game.Id),
+            "rating" => descending
+                ? games.OrderByDescending(item => item.Game.Rating).ThenBy(item => item.Game.Id)
+                : games.OrderBy(item => item.Game.Rating).ThenBy(item => item.Game.Id),
+            "progress" => descending
+                ? games.OrderByDescending(item =>
+                        item.Total == 0 ? 0 : item.Completed * 100.0 / item.Total)
+                    .ThenBy(item => item.Game.Id)
+                : games.OrderBy(item =>
+                        item.Total == 0 ? 0 : item.Completed * 100.0 / item.Total)
+                    .ThenBy(item => item.Game.Id),
+            "createdat" => descending
+                ? games.OrderByDescending(item => item.Game.CreatedAt).ThenBy(item => item.Game.Id)
+                : games.OrderBy(item => item.Game.CreatedAt).ThenBy(item => item.Game.Id),
+            _ => descending
+                ? games.OrderByDescending(item => item.Game.UpdatedAt).ThenBy(item => item.Game.Id)
+                : games.OrderBy(item => item.Game.UpdatedAt).ThenBy(item => item.Game.Id)
+        };
+    }
+
+    private static bool IsSupportedSort(string sortBy) =>
+        sortBy.Equals("title", StringComparison.OrdinalIgnoreCase) ||
+        sortBy.Equals("rating", StringComparison.OrdinalIgnoreCase) ||
+        sortBy.Equals("progress", StringComparison.OrdinalIgnoreCase) ||
+        sortBy.Equals("createdAt", StringComparison.OrdinalIgnoreCase) ||
+        sortBy.Equals("updatedAt", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSupportedSortDirection(string sortDirection) =>
+        sortDirection.Equals("asc", StringComparison.OrdinalIgnoreCase) ||
+        sortDirection.Equals("desc", StringComparison.OrdinalIgnoreCase);
+
+    private sealed class GameListItem
+    {
+        public Game Game { get; init; } = null!;
+        public int Total { get; init; }
+        public int Completed { get; init; }
     }
 
     [HttpPost]
@@ -70,36 +190,38 @@ public class GamesController(
         var userId = currentUser.UserId;
         var title = input.Title?.Trim() ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(title))
+        var inputError = GameInputValidator.Validate(input);
+        if (inputError is not null)
         {
-            return BadRequest(new { message = "Title is required." });
+            return BadRequest(new { message = inputError });
         }
 
-        if (input.Rating is not null &&
-            (input.Rating < 1 || input.Rating > 10))
+        var objectiveInputs = input.Objectives ?? [];
+        var objectiveLabels = objectiveInputs
+            .Select(objective => objective?.Label?.Trim() ?? string.Empty)
+            .ToList();
+
+        if (objectiveInputs.Any(objective => objective is null) ||
+            objectiveLabels.Any(string.IsNullOrWhiteSpace) ||
+            objectiveLabels.Any(label => label.Length > 200) ||
+            objectiveLabels.Count != objectiveLabels
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count())
         {
             return BadRequest(new
             {
-                message = "Rating must be a whole number from 1 to 10."
+                message = "Objective labels are required, must be at most 200 characters, and must be unique."
             });
         }
 
-        if (input.Status == ContractGameStatus.UNPLAYED &&
-            input.Rating is not null)
-        {
-            return BadRequest(new
-            {
-                message = "An unplayed game cannot have a rating."
-            });
-        }
+        var isDuplicate = await UniquenessChecks.IsGameTitleTakenAsync(
+            dbContext,
+            userId,
+            title,
+            (DomainPlatform)input.Platform,
+            exceptGameId: null,
+            cancellationToken);
 
-        var isDuplicate = await dbContext.Games
-            .AsNoTracking()
-            .AnyAsync(g => g.UserId == userId &&
-                           g.Title.ToLower() == title.ToLower() &&
-                           g.Platform == (DomainPlatform)input.Platform,
-                cancellationToken);
-        
         if (isDuplicate)
         {
             return Conflict(new
@@ -125,31 +247,38 @@ public class GamesController(
             UpdatedAt = now,
             StartedAt = input.Status is ContractGameStatus.PLAYING or
                 ContractGameStatus.FINISHED
-                    ? now
-                    : null,
+                ? now
+                : null,
             FinishedAt = input.Status == ContractGameStatus.FINISHED
                 ? now
                 : null
         };
 
-        dbContext.Games.Add(newGame);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            cancellationToken);
 
-        var response = new GameSummaryResponse(
-            newGame.Id,
-            newGame.Title,
-            (ContractPlatform)newGame.Platform,
-            (ContractGameStatus)newGame.Status,
-            newGame.Rating,
-            newGame.Notes,
-            newGame.CoverUrl,
-            newGame.BackgroundUrl,
-            newGame.StartedAt,
-            newGame.FinishedAt,
-            newGame.CreatedAt,
-            newGame.UpdatedAt,
-            new ProgressResponse(Completed: 0, Total: 0, Percentage: null)
-        );
+        dbContext.Games.Add(newGame);
+        dbContext.Objectives.AddRange(
+            objectiveLabels.Select((label, index) => new Objective
+            {
+                Id = Guid.NewGuid(),
+                GameId = newGame.Id,
+                Label = label,
+                Completed = false,
+                Position = index + 1,
+                CreatedAt = now,
+                UpdatedAt = now
+            }));
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var response = ResponseMapper.ToSummary(
+            newGame,
+            new ProgressResponse(
+                Completed: 0,
+                Total: objectiveLabels.Count,
+                Percentage: objectiveLabels.Count == 0 ? null : 0));
 
         return StatusCode(StatusCodes.Status201Created, response);
     }
@@ -161,12 +290,7 @@ public class GamesController(
     {
         var userId = currentUser.UserId;
 
-        var game = await dbContext.Games
-            .AsNoTracking()
-            .SingleOrDefaultAsync(
-                candidate => candidate.Id == gameId &&
-                             candidate.UserId == userId,
-                cancellationToken);
+        var game = await OwnedRecords.FindGameAsync(dbContext, gameId, userId, cancellationToken);
 
         if (game is null)
         {
@@ -195,17 +319,172 @@ public class GamesController(
             game.FinishedAt,
             game.CreatedAt,
             game.UpdatedAt,
-            objectives.Select(objective => new ObjectiveResponse(
-                objective.Id,
-                objective.GameId,
-                objective.Label,
-                objective.Completed,
-                objective.Position,
-                objective.CompletedAt,
-                objective.CreatedAt,
-                objective.UpdatedAt)).ToList(),
+            objectives.Select(ResponseMapper.ToObjective).ToList(),
             ProgressCalculator.Calculate(completed, total));
 
         return Ok(response);
+    }
+
+    [HttpGet("{gameId:guid}/progress")]
+    public async Task<ActionResult<ProgressResponse>> GetProgress(
+        Guid gameId,
+        CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+
+        var gameExists = await OwnedRecords.GameExistsAsync(dbContext, gameId, userId, cancellationToken);
+
+        if (!gameExists)
+        {
+            return NotFound(new { message = "Game not found." });
+        }
+
+        return Ok(await GameProgressQuery.GetAsync(dbContext, gameId, cancellationToken));
+    }
+
+    [HttpGet("{gameId:guid}/history")]
+    public async Task<ActionResult<IReadOnlyList<StatusHistoryResponse>>> GetStatusHistory(
+        Guid gameId,
+        CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+
+        var gameExists = await OwnedRecords.GameExistsAsync(dbContext, gameId, userId, cancellationToken);
+
+        if (!gameExists)
+        {
+            return NotFound(new { message = "Game not found." });
+        }
+
+        var history = await dbContext.GameStatusHistories
+            .AsNoTracking()
+            .Where(entry => entry.GameId == gameId)
+            .OrderBy(entry => entry.ChangedAt)
+            .Select(entry => new StatusHistoryResponse(
+                entry.Id,
+                entry.GameId,
+                (ContractGameStatus)entry.PreviousStatus,
+                (ContractGameStatus)entry.NewStatus,
+                entry.ChangedBy,
+                entry.ChangedAt,
+                entry.Comment))
+            .ToListAsync(cancellationToken);
+
+        return Ok(history);
+    }
+
+    [HttpPut("{gameId:guid}")]
+    public async Task<ActionResult<GameSummaryResponse>> Update(
+        Guid gameId,
+        [FromBody] GameInput input,
+        CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+        var title = input.Title?.Trim() ?? string.Empty;
+
+        var inputError = GameInputValidator.Validate(input);
+        if (inputError is not null)
+        {
+            return BadRequest(new { message = inputError });
+        }
+
+        var game = await OwnedRecords.FindGameAsync(dbContext, gameId, userId, cancellationToken);
+
+        if (game is null)
+        {
+            return NotFound(new { message = "Game not found." });
+        }
+
+        if (game.Status != (DomainGameStatus)input.Status)
+        {
+            return Conflict(new
+            {
+                message = "Use the status endpoint to change a game's status."
+            });
+        }
+
+        var isDuplicate = await UniquenessChecks.IsGameTitleTakenAsync(
+            dbContext,
+            userId,
+            title,
+            (DomainPlatform)input.Platform,
+            exceptGameId: gameId,
+            cancellationToken);
+
+        if (isDuplicate)
+        {
+            return Conflict(new
+            {
+                message = $"You already have '{title}' on this platform in your backlog."
+            });
+        }
+
+        game.Title = title;
+        game.Platform = (DomainPlatform)input.Platform;
+        game.Rating = input.Status == ContractGameStatus.UNPLAYED
+            ? null
+            : input.Rating;
+        game.Notes = input.Notes;
+        game.CoverUrl = input.CoverUrl;
+        game.BackgroundUrl = input.BackgroundUrl;
+        game.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var progress = await GameProgressQuery.GetAsync(dbContext, game.Id, cancellationToken);
+
+        return Ok(ResponseMapper.ToSummary(game, progress));
+    }
+
+    [HttpDelete("{gameId:guid}")]
+    public async Task<IActionResult> Delete(
+        Guid gameId,
+        CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+
+        var game = await OwnedRecords.FindGameAsync(dbContext, gameId, userId, cancellationToken);
+
+        if (game is null)
+        {
+            return NotFound(new { message = "Game not found." });
+        }
+
+        dbContext.Games.Remove(game);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return NoContent();
+    }
+
+    [HttpPatch("{gameId:guid}/status")]
+    public async Task<ActionResult<StatusUpdateResponse>> UpdateStatus(
+        Guid gameId,
+        [FromBody] StatusUpdateInput input,
+        CancellationToken cancellationToken)
+    {
+        var result = await gameStatusService.ChangeStatusAsync(
+            currentUser.UserId,
+            gameId,
+            input.Status,
+            input.Comment,
+            cancellationToken);
+
+        switch (result.Outcome)
+        {
+            case StatusChangeOutcome.GameNotFound:
+                return NotFound(new { message = "Game not found." });
+            case StatusChangeOutcome.InvalidStatus:
+                return BadRequest(new { message = "Status is invalid." });
+            case StatusChangeOutcome.AlreadyHasStatus:
+                return Conflict(new { message = "The game already has this status." });
+            case StatusChangeOutcome.TransitionNotAllowed:
+                return Conflict(new { message = "This status transition is not allowed." });
+        }
+
+        var progress = await GameProgressQuery.GetAsync(dbContext, gameId, cancellationToken);
+
+        return Ok(new StatusUpdateResponse(
+            ResponseMapper.ToSummary(result.Game!, progress),
+            result.HasOutstandingObjectives));
     }
 }

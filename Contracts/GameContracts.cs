@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace DexGameBacklog.Api.Contracts;
 
 public enum Platform
@@ -48,6 +50,40 @@ public sealed record GameSummaryResponse(
     DateTimeOffset UpdatedAt,
     ProgressResponse Progress);
 
+public sealed record GameQueryParameters
+{
+    [StringLength(200)]
+    public string? Search { get; init; }
+
+    [EnumDataType(typeof(Platform))]
+    public Platform? Platform { get; init; }
+
+    [EnumDataType(typeof(GameStatus))]
+    public GameStatus? Status { get; init; }
+
+    [Range(1, 10)]
+    public int? MinRating { get; init; }
+
+    [Range(1, 10)]
+    public int? MaxRating { get; init; }
+
+    public bool? HasObjectives { get; init; }
+    public bool? FullyComplete { get; init; }
+
+    [RegularExpression("^(title|rating|progress|createdAt|updatedAt)$",
+        MatchTimeoutInMilliseconds = 100)]
+    public string SortBy { get; init; } = "updatedAt";
+
+    [RegularExpression("^(asc|desc)$", MatchTimeoutInMilliseconds = 100)]
+    public string SortDirection { get; init; } = "desc";
+
+    [Range(1, 100000)]
+    public int Page { get; init; } = 1;
+
+    [Range(1, 100)]
+    public int PageSize { get; init; } = 20;
+}
+
 public sealed record GameDetailResponse(
     Guid Id,
     string Title,
@@ -64,22 +100,59 @@ public sealed record GameDetailResponse(
     IReadOnlyList<ObjectiveResponse> Objectives,
     ProgressResponse Progress);
 
-public sealed record GameInput(
-    string Title,
-    Platform Platform,
-    GameStatus Status,
-    int? Rating,
-    string? Notes,
-    string? CoverUrl,
-    string? BackgroundUrl);
+public sealed record GameInput
+{
+    [Required]
+    [StringLength(200)]
+    public string Title { get; init; } = string.Empty;
 
-public sealed record ObjectiveInput(string Label);
+    [EnumDataType(typeof(Platform))]
+    public Platform Platform { get; init; }
 
-public sealed record StatusUpdateInput(
-    GameStatus Status,
-    string? Comment);
+    [EnumDataType(typeof(GameStatus))]
+    public GameStatus Status { get; init; }
 
-public sealed record ObjectiveUpdateInput(string Label);
+    [Range(1, 10)]
+    public int? Rating { get; init; }
+
+    [StringLength(4000)]
+    public string? Notes { get; init; }
+
+    [StringLength(2048)]
+    public string? CoverUrl { get; init; }
+
+    [StringLength(2048)]
+    public string? BackgroundUrl { get; init; }
+
+    public IReadOnlyList<ObjectiveInput>? Objectives { get; init; }
+}
+
+public sealed record ObjectiveInput
+{
+    [Required]
+    [StringLength(200)]
+    public string Label { get; init; } = string.Empty;
+}
+
+public sealed record StatusUpdateInput
+{
+    [EnumDataType(typeof(GameStatus))]
+    public GameStatus Status { get; init; }
+
+    [StringLength(500)]
+    public string? Comment { get; init; }
+}
+
+public sealed record StatusUpdateResponse(
+    GameSummaryResponse Game,
+    bool HasOutstandingObjectives);
+
+public sealed record ObjectiveUpdateInput
+{
+    [Required]
+    [StringLength(200)]
+    public string Label { get; init; } = string.Empty;
+}
 
 public sealed record ObjectiveOrderInput(
     IReadOnlyList<Guid> ObjectiveIds);

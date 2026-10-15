@@ -101,3 +101,109 @@ JOIN "Objectives" AS objective
 objectives. EF uses the configuration to create the database foreign key;
 normal queries still use LINQ, which EF translates into SQL joins or related
 queries.
+
+## How the dashboard summary is built
+
+`DashboardController` does not store a separate dashboard object in the
+database. It calculates the summary from the authenticated user's games and
+objectives:
+
+- `GroupBy` counts games by their current status.
+- `Average` calculates the average of ratings that exist.
+- grouped objective counts identify fully complete games and games with no
+  objectives.
+- the recent-games query orders by `UpdatedAt` and uses `Take(5)` to return
+  only a small dashboard list.
+
+Every query includes the current user's ID. This is both an ownership rule and
+a correctness requirement: dashboard totals must not include another user's
+games.
+
+The recent-games limit is a presentation/performance decision. It is not the
+same kind of rule as "a title is required"; changing it should not alter the
+meaning of the stored data.
+
+## IDs in status history responses
+
+`GameStatusHistory.Id` is the identifier of the history row itself. It is
+generated with `Guid.NewGuid()` when a successful status transition creates
+the row. `GameStatusHistory.GameId` identifies the related game, while
+`ChangedBy` identifies the user who made the change. Returning `entry.Id`
+therefore lets a client distinguish one history event from another; it is not
+the game's ID.
+
+## Validate before persistence
+
+Request validation belongs at the HTTP boundary as well as in the database.
+The controller can return a useful `400 Bad Request` for an invalid enum,
+blank/oversized text, or invalid rating before EF Core sends SQL. Database
+length limits and unique indexes remain important backstops, but database
+errors are less useful to an API client than a deliberate validation response.
+
+The validation helper is shared by the game and objective controllers so the
+same limits are not reimplemented differently in each endpoint.
+
+## DTO validation versus database configuration
+
+Data-annotation attributes on request DTOs validate the incoming HTTP payload.
+For example, `[Required]` rejects a missing title and `[StringLength(200)]`
+rejects an oversized label before the controller performs its work.
+
+EF Core configuration protects the database schema, even if data reaches the
+database through another path. Controller or service validation remains
+necessary for rules that need application context, such as uniqueness,
+ownership, rating conditions, and allowed status transitions. These layers
+overlap intentionally but serve different boundaries.
+
+Request DTOs use records with explicit properties rather than positional
+parameters. This lets attributes such as `[Required]` and `[StringLength]` be
+placed directly on the properties that ASP.NET Core validates. Positional
+records are still useful for response DTOs because those responses do not need
+input validation.
+
+## Filtering and paginating list queries
+
+The game-list query applies ownership and filters before materializing results.
+It calculates objective totals in the database projection, so the API does not
+load every objective into memory just to calculate progress. `CountAsync`
+determines the total matching rows, then `Skip` and `Take` fetch only the
+requested page.
+
+The response remains an array for frontend compatibility. Pagination metadata
+is sent in headers, which lets newer clients paginate without changing the
+existing response body shape.
+
+Query-string binding converts values such as `platform=STEAM` and
+`pageSize=20` into the `GameQueryParameters` object. Data annotations validate
+simple ranges and formats, while explicit checks reject enum numbers that are
+technically representable by C# but are not supported by the API contract.
+
+## Keeping status rules outside the controller
+
+The allowed status transitions are a business rule, not an HTTP concern.
+`StatusTransitionRules` keeps that rule reusable and independently testable,
+while `GamesController` remains responsible for translating the result into
+HTTP responses such as `409 Conflict`.
+
+The controller receives `GameStatusService` through its constructor. ASP.NET
+Core's dependency injection container creates it, so the controller never calls
+`new` on it. `Program.cs` registers it with `AddScoped`, which means one
+instance per HTTP request, matching the scoped `AppDbContext` it depends on.
+
+## Why request DTOs use `init`
+
+Request DTO properties use `get; init;` instead of `get; set;`. ASP.NET Core
+can populate the object during model binding, but application code cannot
+accidentally change the request values afterward. This makes the input
+snapshot effectively read-only once it has been created. It is different from
+`get; set;`, which permits mutation at any time.
+
+## Testing a business rule directly
+
+`StatusTransitionRulesTests` tests the transition table without starting the
+web server or connecting to PostgreSQL. This is a unit test: it supplies
+status values, calls the rule, and checks the boolean result.
+
+The tests cover allowed transitions, rejected transitions, and unchanged
+status. Controller tests will later verify that these results become the
+correct HTTP responses, such as `409 Conflict`.

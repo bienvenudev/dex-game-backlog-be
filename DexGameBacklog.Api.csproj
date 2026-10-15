@@ -4,7 +4,14 @@
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <UserSecretsId>a28d6a9a-5edd-4957-92a7-898d4207560a</UserSecretsId>
     </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Remove="Tests/**/*.cs" />
+        <EmbeddedResource Remove="Tests/**/*.resx" />
+        <Content Remove="Tests/**/*" />
+    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
@@ -15,6 +22,7 @@
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.0" />
     </ItemGroup>
 
 </Project>
