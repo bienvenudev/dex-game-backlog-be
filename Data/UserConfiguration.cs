@@ -13,5 +13,10 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(user => user.Username)
             .IsRequired()
             .HasMaxLength(100);
+
+        // Login looks a user up by name, so two rows with one name would break it.
+        // Also stops replicas that seed at the same time from creating duplicates.
+        builder.HasIndex(user => user.Username)
+            .IsUnique();
     }
 }
