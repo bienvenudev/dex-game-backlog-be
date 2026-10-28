@@ -1,0 +1,17 @@
+# Build output and IDE files
+bin/
+obj/
+.idea/
+.vs/
+.vscode/
+*.user
+*.DotSettings.user
+
+# Not needed in the image
+.git/
+Tests/
+Docs/
+k8s/
+*.md
+.mcp.json
+http-client.private.env.json
