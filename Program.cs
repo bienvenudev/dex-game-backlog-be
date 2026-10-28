@@ -40,6 +40,7 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddHealthChecks();
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -84,11 +85,19 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// Inside a cluster the container serves plain HTTP and TLS ends in front of it,
+// so the deployment turns this off with HttpsRedirection__Enabled=false.
+if (app.Configuration.GetValue("HttpsRedirection:Enabled", true))
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Kubernetes probes call this to decide whether the pod is alive and ready.
+app.MapHealthChecks("/health");
 
 app.Run();
