@@ -1,0 +1,5 @@
+# Groups every Dex object, so `kubectl delete namespace dex` removes them all.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dex
