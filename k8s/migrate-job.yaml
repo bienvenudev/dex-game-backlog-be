@@ -13,7 +13,8 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: migrate
-          image: dex-api:local
+          # Bump the tag on every rebuild: the node caches images by tag.
+          image: dex-api:0.2
           imagePullPolicy: IfNotPresent
           env:
             - name: ConnectionStrings__DefaultConnection

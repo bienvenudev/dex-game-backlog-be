@@ -1,0 +1,85 @@
+# Non-secret settings, read by the API as environment variables.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dex-api-config
+  namespace: dex
+data:
+  # Development turns on the seeder and Swagger for this local learning cluster.
+  ASPNETCORE_ENVIRONMENT: Development
+  # TLS would end in front of the pods, so they serve plain HTTP.
+  HttpsRedirection__Enabled: "false"
+  Jwt__Issuer: DexGameBacklog.Api
+  Jwt__Audience: DexGameBacklog.Client
+---
+# Two stateless replicas; Kubernetes replaces any pod that dies.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dex-api
+  namespace: dex
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: dex-api
+  template:
+    metadata:
+      labels:
+        app: dex-api
+    spec:
+      containers:
+        - name: api
+          # Bump the tag on every rebuild: the node caches images by tag.
+          image: dex-api:0.2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: dex-api-config
+          # Only the keys the API needs; POSTGRES_PASSWORD stays with the database.
+          env:
+            - name: ConnectionStrings__DefaultConnection
+              valueFrom:
+                secretKeyRef: { name: dex-secrets, key: ConnectionStrings__DefaultConnection }
+            - name: Jwt__Key
+              valueFrom:
+                secretKeyRef: { name: dex-secrets, key: Jwt__Key }
+            - name: Authentication__Users__0__Username
+              valueFrom:
+                secretKeyRef: { name: dex-secrets, key: Authentication__Users__0__Username }
+            - name: Authentication__Users__0__Password
+              valueFrom:
+                secretKeyRef: { name: dex-secrets, key: Authentication__Users__0__Password }
+            - name: Authentication__Users__1__Username
+              valueFrom:
+                secretKeyRef: { name: dex-secrets, key: Authentication__Users__1__Username }
+            - name: Authentication__Users__1__Password
+              valueFrom:
+                secretKeyRef: { name: dex-secrets, key: Authentication__Users__1__Password }
+          # Readiness: send traffic only once the pod answers.
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          # Liveness: restart the container if it stops answering.
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+# Spreads requests across the API pods. Docker Desktop maps a LoadBalancer to
+# localhost; 8081 because 8080 is often taken on the host.
+apiVersion: v1
+kind: Service
+metadata:
+  name: dex-api
+  namespace: dex
+spec:
+  type: LoadBalancer
+  selector:
+    app: dex-api
+  ports:
+    - port: 8081
+      targetPort: 8080
