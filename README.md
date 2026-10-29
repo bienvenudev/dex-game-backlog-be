@@ -83,6 +83,92 @@ then use the `Authorize` button in Swagger with the token.
   missing required field) return ASP.NET's `ProblemDetails` body, with the details
   in `errors`. Business-rule failures return `{ "message": "..." }`.
 
+## Running on Kubernetes
+
+The `k8s/` folder runs the API and PostgreSQL on a local cluster. It was built
+with Docker Desktop's Kubernetes; any cluster that can see locally built images
+works the same way.
+
+| Object | Purpose |
+| --- | --- |
+| `postgres` StatefulSet, volume claim, and Service | The database, reachable inside the cluster as `postgres:5432`; data survives pod restarts |
+| `dex-migrate` Job | Runs the EF migrations bundle once, before the API starts |
+| `dex-api` Deployment (2 replicas) | The API, with `/health` readiness and liveness probes |
+| `dex-api` Service (LoadBalancer) | Spreads requests across the replicas, on `http://localhost:8081` |
+| `dex-api-config` ConfigMap | Environment, HTTPS switch, JWT issuer and audience |
+| `dex-secrets` Secret | Connection string, JWT key, login accounts, Postgres password |
+
+### Deploy
+
+1. Create the Secret file. `k8s/secret.yaml` is git-ignored; fill in every
+   placeholder:
+
+   ```bash
+   cp k8s/secret.example.yaml k8s/secret.yaml
+   ```
+
+2. Build the image. The tag must match `image:` in `k8s/api.yaml` and
+   `k8s/migrate-job.yaml`:
+
+   ```bash
+   docker build -t dex-api:0.3 .
+   ```
+
+3. Start the database, then migrate, then start the API:
+
+   ```bash
+   kubectl apply -f k8s/namespace.yaml
+   kubectl apply -f k8s/secret.yaml
+   kubectl apply -f k8s/postgres.yaml
+   kubectl wait --for=condition=Ready pod/postgres-0 -n dex --timeout=180s
+   kubectl apply -f k8s/migrate-job.yaml
+   kubectl wait --for=condition=Complete job/dex-migrate -n dex --timeout=120s
+   kubectl apply -f k8s/api.yaml
+   ```
+
+4. Check it:
+
+   ```bash
+   kubectl get pods -n dex
+   curl http://localhost:8081/health
+   ```
+
+   Swagger is at `http://localhost:8081/swagger`. The cluster runs as
+   `Development`, so ben's and jane's sample games are seeded.
+
+### Update after a code change
+
+The node caches images by tag, so rebuilding `dex-api:0.3` is ignored. Build
+with a new tag, change `image:` in both manifests, then re-run the Job (a
+finished Job can't be changed) and apply the API:
+
+```bash
+docker build -t dex-api:0.4 .
+kubectl delete job dex-migrate -n dex
+kubectl apply -f k8s/migrate-job.yaml
+kubectl apply -f k8s/api.yaml
+```
+
+### Useful commands
+
+| Command | What it does |
+| --- | --- |
+| `kubectl logs -n dex -l app=dex-api` | API logs from every replica |
+| `kubectl scale deployment dex-api -n dex --replicas=3` | Change the number of API pods |
+| `kubectl delete pod -n dex <pod>` | Kill a pod; the Deployment replaces it |
+| `kubectl delete namespace dex` | Remove everything, including the database volume |
+
+### Notes
+
+- With two replicas, both run the seeder at startup. The unique username index
+  makes one of them fail and restart once; a single restart on first deploy is
+  expected.
+- Port 8081 is used because 8080 is often taken on the host. Change `port` in the
+  `dex-api` Service if 8081 is busy.
+- CORS allows the origins in `Cors__AllowedOrigins__*` in the ConfigMap. The
+  frontend's dev server (`http://localhost:1420`) is allowed; point it at
+  `http://localhost:8081/api` (HTTP, not HTTPS).
+
 ## Commands
 
 | Command | What it does |
@@ -119,8 +205,10 @@ DexGameBacklog.Api/
 ├── Migrations/         EF Core migrations
 ├── Services/           Rules and queries (see below)
 ├── Docs/               Assignment brief, decisions, learning notes
+├── k8s/                Kubernetes manifests (see Running on Kubernetes)
 ├── Tests/
 │   └── DexGameBacklog.Api.Tests/   Test project, separate from the API
+├── Dockerfile          Multi-stage image build, including the migrations bundle
 ├── Program.cs          Startup, DI registration, middleware
 └── DexGameBacklog.Api.sln
 ```
@@ -246,7 +334,9 @@ Main lessons:
 - Development authentication only: no password hashing, a single symmetric key,
   and an 8-hour token lifetime set in code rather than configuration.
 - Deleting an objective leaves gaps in positions. Reordering fixes them.
-- Production hardening (secret management, CORS policy, deployment) is out of scope.
+- The Kubernetes setup targets a local cluster: no ingress or TLS, secrets in a
+  plain Secret, images built locally, and the seeder running in each replica.
+- Production hardening (secret management, production CORS origins) is out of scope.
 
 ## Project notes
 

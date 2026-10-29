@@ -1,0 +1,65 @@
+# Stable DNS name for the database: other pods connect to postgres:5432.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: dex
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+---
+# A StatefulSet, not a Deployment, so the pod keeps the same identity and volume
+# across restarts.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: dex
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: dex_game_backlog
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dex-secrets
+                  key: POSTGRES_PASSWORD
+            # A subfolder, because initdb refuses a volume root that already has files.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "dex_game_backlog"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+  # Creates one PersistentVolumeClaim for the pod, so data survives pod deletion.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

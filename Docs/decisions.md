@@ -104,3 +104,31 @@ The service is registered as a concrete scoped class, not behind an interface.
 A separate interface would only help if we needed a second implementation or a
 fake, and neither exists yet. We can introduce `IGameStatusService` later
 without changing the controller's behaviour.
+
+## Kubernetes deployment
+
+Kubernetes is a learning extension, not a capstone requirement. It does test
+the requirement that the API can run as a remote service with its settings in
+configuration.
+
+- **No microservices.** The project has two workloads with different natures:
+  a stateless API (a Deployment with replicas) and a stateful database (a
+  StatefulSet with a volume). Splitting the API further would add complexity
+  without teaching more.
+- **Migrations in a Job, not at startup.** Calling `MigrateAsync` in
+  `Program.cs` would make every replica try to migrate when it starts. An EF
+  migrations bundle, built into the image and run once by a Job, migrates
+  before the API rolls out.
+- **Configuration through environment variables.** The ConfigMap and Secret use
+  the same keys as user secrets (`ConnectionStrings__DefaultConnection`,
+  `Jwt__Key`), so `Program.cs` reads them without new code.
+- **Plain HTTP inside the cluster.** `HttpsRedirection:Enabled` turns off the
+  redirect, because a real deployment ends TLS at an ingress in front of the
+  pods.
+- **Development environment in the cluster.** This brings back the seeder and
+  Swagger for a local learning cluster. Both replicas seed at startup, and the
+  unique index on `Users.Username` makes the losing replica fail and restart
+  once instead of creating duplicate users. A production setup would seed
+  separately or not at all.
+- **Versioned image tags.** The node caches images by tag, so each rebuild gets a
+  new tag (`dex-api:0.2`, `0.3`, …) instead of reusing `latest` or `local`.

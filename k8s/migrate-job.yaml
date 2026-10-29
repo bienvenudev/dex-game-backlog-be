@@ -1,0 +1,26 @@
+# Applies EF migrations once, then stops. Run it before rolling out the API, so
+# replicas never race to migrate at startup. A Job can't be changed after it
+# runs: delete it before applying again.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dex-migrate
+  namespace: dex
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          # Bump the tag on every rebuild: the node caches images by tag.
+          image: dex-api:0.3
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ConnectionStrings__DefaultConnection
+              valueFrom:
+                secretKeyRef:
+                  name: dex-secrets
+                  key: ConnectionStrings__DefaultConnection
+          command: ["./efbundle"]
+          args: ["--connection", "$(ConnectionStrings__DefaultConnection)"]

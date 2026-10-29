@@ -161,6 +161,9 @@ namespace DexGameBacklog.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Username")
+                        .IsUnique();
+
                     b.ToTable("Users");
                 });
 
