@@ -111,7 +111,7 @@ works the same way.
    `k8s/migrate-job.yaml`:
 
    ```bash
-   docker build -t dex-api:0.2 .
+   docker build -t dex-api:0.3 .
    ```
 
 3. Start the database, then migrate, then start the API:
@@ -138,12 +138,12 @@ works the same way.
 
 ### Update after a code change
 
-The node caches images by tag, so rebuilding `dex-api:0.2` is ignored. Build
+The node caches images by tag, so rebuilding `dex-api:0.3` is ignored. Build
 with a new tag, change `image:` in both manifests, then re-run the Job (a
 finished Job can't be changed) and apply the API:
 
 ```bash
-docker build -t dex-api:0.3 .
+docker build -t dex-api:0.4 .
 kubectl delete job dex-migrate -n dex
 kubectl apply -f k8s/migrate-job.yaml
 kubectl apply -f k8s/api.yaml
@@ -165,8 +165,9 @@ kubectl apply -f k8s/api.yaml
   expected.
 - Port 8081 is used because 8080 is often taken on the host. Change `port` in the
   `dex-api` Service if 8081 is busy.
-- CORS isn't configured yet, so the desktop frontend can't call the cluster
-  directly.
+- CORS allows the origins in `Cors__AllowedOrigins__*` in the ConfigMap. The
+  frontend's dev server (`http://localhost:1420`) is allowed; point it at
+  `http://localhost:8081/api` (HTTP, not HTTPS).
 
 ## Commands
 
@@ -335,7 +336,7 @@ Main lessons:
 - Deleting an objective leaves gaps in positions. Reordering fixes them.
 - The Kubernetes setup targets a local cluster: no ingress or TLS, secrets in a
   plain Secret, images built locally, and the seeder running in each replica.
-- Production hardening (secret management, CORS policy) is out of scope.
+- Production hardening (secret management, production CORS origins) is out of scope.
 
 ## Project notes
 

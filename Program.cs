@@ -42,6 +42,14 @@ builder.Services
 builder.Services.AddAuthorization();
 builder.Services.AddHealthChecks();
 
+// The frontend runs on another origin (the Vite dev server or the packaged app),
+// so the browser needs permission to call the API. Origins come from configuration.
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
+    .WithOrigins(allowedOrigins)
+    .AllowAnyHeader()
+    .AllowAnyMethod()));
+
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.Converters.Add(
@@ -91,6 +99,9 @@ if (app.Configuration.GetValue("HttpsRedirection:Enabled", true))
 {
     app.UseHttpsRedirection();
 }
+
+// Before authentication, so preflight OPTIONS requests are answered without a token.
+app.UseCors();
 
 app.UseAuthentication();
 app.UseAuthorization();

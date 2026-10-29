@@ -14,7 +14,7 @@ spec:
       containers:
         - name: migrate
           # Bump the tag on every rebuild: the node caches images by tag.
-          image: dex-api:0.2
+          image: dex-api:0.3
           imagePullPolicy: IfNotPresent
           env:
             - name: ConnectionStrings__DefaultConnection

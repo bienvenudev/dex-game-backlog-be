@@ -11,6 +11,8 @@ data:
   HttpsRedirection__Enabled: "false"
   Jwt__Issuer: DexGameBacklog.Api
   Jwt__Audience: DexGameBacklog.Client
+  # The frontend's Vite dev server; add the packaged app's origin when it calls the cluster.
+  Cors__AllowedOrigins__0: http://localhost:1420
 ---
 # Two stateless replicas; Kubernetes replaces any pod that dies.
 apiVersion: apps/v1
@@ -31,7 +33,7 @@ spec:
       containers:
         - name: api
           # Bump the tag on every rebuild: the node caches images by tag.
-          image: dex-api:0.2
+          image: dex-api:0.3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
